@@ -53,10 +53,10 @@ const EARTH_SPIN = 0.012;
 const DEST_SPIN = 0.03;
 const DEST_SEGMENTS = 64;
 const GROUND_DROP = 4000;
-/** Pergeseran jangkar permukaan Bumi relatif terhadap posisi orbit [x, y, z] menuju kiri-bawah-jauh di balik ekor roket. */
-const EARTH_DEPART_ANCHOR_OFFSET: [number, number, number] = [170, -450, -1720];
-/** Arah normal sisi Bumi yang menghadap lintasan terbang kanan-atas (diagonal berlawanan dari surutnya Bumi). */
-const EARTH_DEPART_NORMAL: [number, number, number] = [0.566, 0.669, 0.474];
+/** Pergeseran jangkar Bumi saat transfer ke belakang-kiri di sejajar lintasan sehingga wahana terasa melaju lurus ke depan. */
+const EARTH_DEPART_ANCHOR_OFFSET: [number, number, number] = [860, -70, -1330];
+/** Arah normal sisi Bumi yang menghadap langsung ke depan lintasan wahana (+x, sedikit atas/kanan). */
+const EARTH_DEPART_NORMAL: [number, number, number] = [0.85, 0.35, 0.40];
 const PLANET_FOLLOW = 3.5;
 const STAR_DOME_RADIUS = 3400;
 const DEST_RADIUS = 420;
@@ -97,14 +97,15 @@ const LIGHT_LANDING = { hemi: 0.55, sun: 1.7 } as const;
  * Posisi planet tujuan di koridor jalur depan hidung roket (+x).
  * Bergerak mendekat secara spasial sepanjang transfer (START -> END) sehingga terasa nyata didekati.
  */
-const DEST_BODY_POS_START: [number, number, number] = [2350, 120, -1350];
-const DEST_BODY_POS_END: [number, number, number] = [1250, 20, -650];
-const DEST_BODY_POS_CAPTURE: [number, number, number] = [820, -25, -420];
+const DEST_BODY_POS_START: [number, number, number] = [2450, 20, -450];
+const DEST_BODY_POS_END: [number, number, number] = [1250, 5, -210];
+const DEST_BODY_POS_CAPTURE: [number, number, number] = [820, -15, -135];
 /** Kabut hitam di cakrawala Bulan pada ketinggian awal landing agar tepi cakram tidak terlihat terpotong di angkasa gelap. */
 const MOON_HORIZON_FOG_MAX = 0.00072;
 const LANDED_LEVEL_SEC = 0.4;
-/** Kamera bergeser ke belakang-samping roket sebesar sudut ini agar hidung roket yang mendatar menghadap ke planet di depan. */
+/** Kamera bergeser ke belakang-samping roket (40° saat orbit; 62° chase-cam saat transfer agar terasa melaju lurus ke depan). */
 const CAM_HEADING_DEG = 40;
+const CAM_TRANSFER_HEADING_DEG = 62;
 const CAM_HEADING_DIST_BOOST = 0.3;
 /** Kecepatan aliran debu antariksa (satuan/detik) yang memberi kesan roket maju. */
 const DUST_FLOW = { launch: 38, orbit: 14, transferCoast: 48, transferBurn: 95, capture: 26 } as const;
@@ -939,7 +940,7 @@ export class FlightScene extends BaseScene {
       const ny = (1 - earthDep) + EARTH_DEPART_NORMAL[1] * earthDep;
       const nz = EARTH_DEPART_NORMAL[2] * earthDep;
       const nLen = Math.hypot(nx, ny, nz) || 1;
-      const anchorY = EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_ANCHOR_OFFSET[1] * Math.pow(earthDep, 1.5);
+      const anchorY = EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_ANCHOR_OFFSET[1] * earthDep;
       this.earth.root.scale.setScalar(shrink);
       this.earth.root.position.set(
         EARTH_DEPART_ANCHOR_OFFSET[0] * earthDep - radiusNow * (nx / nLen),
@@ -991,8 +992,13 @@ export class FlightScene extends BaseScene {
     const axis = this.axisDir();
     const wantTarget = axis.clone().multiplyScalar(-(remaining / 2 - 1.5));
     const dist = clamp(remaining * 1.9, 14, 70);
-    // Sudut kamera mengikuti roket yang membelok ke arah planet: dari depan menara saat tegak, ke belakang-samping saat mendatar.
-    const heading = THREE.MathUtils.degToRad(CAM_HEADING_DEG) * (sim.phase === 'launch' && !sim.crashed ? smoothstep(0.1, 0.7, sim.progress) : 1);
+    // Sudut kamera mengikuti roket yang membelok ke orbit (40°) lalu meluncur ke sudut kejar (62°) saat transfer agar gerak maju terasa lurus.
+    const inTransfer = scenePhase === 'transfer' || scenePhase === 'capture' || scenePhase === 'landing' || scenePhase === 'ended';
+    const heading = THREE.MathUtils.degToRad(
+      inTransfer
+        ? CAM_TRANSFER_HEADING_DEG
+        : CAM_HEADING_DEG * (sim.phase === 'launch' && !sim.crashed ? smoothstep(0.1, 0.7, sim.progress) : 1),
+    );
     // Dari samping-belakang ekor roket lebih dekat ke kamera, jadi jarak ditambah sedikit agar tidak menutupi layar.
     if (this.sepCamKick > 0) this.sepCamKick = Math.max(0, this.sepCamKick - dt / 0.85);
     const kickBoost = Math.sin(this.sepCamKick * Math.PI) * 0.16;
