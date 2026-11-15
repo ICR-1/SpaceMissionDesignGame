@@ -77,12 +77,14 @@ export function stepStaging(
   dtSec: number,
   throttle01: number,
   jettisonPressed: boolean,
+  holdLastStage = false,
 ): { state: StagingState; events: StagingEvent[] } {
   const state: StagingState = { ...prev, stages: prev.stages.map((st) => ({ ...st })) };
   const events: StagingEvent[] = [];
+  const lastIdx = state.stages.length - 1;
 
-  state.stages.forEach((st) => {
-    if (st.phase === 'depleted') st.sinceDepletedSec += dtSec;
+  state.stages.forEach((st, i) => {
+    if (st.phase === 'depleted' && !(holdLastStage && i === lastIdx)) st.sinceDepletedSec += dtSec;
   });
 
   const active = activeStageIndex(state);
@@ -111,7 +113,7 @@ export function stepStaging(
   };
 
   const oldest = oldestDepletedIndex(state);
-  if (oldest >= 0) {
+  if (oldest >= 0 && !(holdLastStage && oldest === lastIdx)) {
     if (jettisonPressed) jettison(oldest, false);
     else if (state.stages[oldest].sinceDepletedSec >= STAGING.autoJettisonSec - EPS) jettison(oldest, true);
   }

@@ -8,6 +8,7 @@ const C = {
   hull: 0xe9edf3, stripe: 0xf08a24, dark: 0x30333c, steel: 0x9aa3b0, nozzle: 0x1a1b20,
   rim: 0x6b7280, cyan: 0x4fd1ff,
   orangeFoam: 0xc85d1e, copper: 0x9e633b, soot: 0x20232a, red: 0xc93b32,
+  foil: 0xc9a227, solar: 0x1b2a6b,
 };
 /** Aksen warna tiap tahap agar mudah dibedakan di preview. */
 export const STAGE_ACCENTS = [0xf08a24, 0xd94f4f, 0xe0b73a, 0x4f8fe0];
@@ -270,6 +271,50 @@ export function buildRocket(rocket: Rocket): RocketModel {
     root, stageGroups, fairingLeft, fairingRight, landerSlot, boundaryRings, radius,
     totalHeight: y + FAIRING_CYLINDER_HEIGHT + FAIRING_CONE_HEIGHT, stageTopY,
   };
+}
+
+export interface CruiseShell {
+  root: THREE.Group;
+  leftWing: THREE.Group;
+  rightWing: THREE.Group;
+}
+
+/**
+ * Kapsul jelajah + aeroshell pelindung wahana pendarat: menutup rapat lander berkaki empat selama berada
+ * di orbit, burn transfer, dan coast antarplanet; dilepas bersama tahap transfer saat penangkapan orbit.
+ */
+export function buildCruiseShell(rocketRadius: number): CruiseShell {
+  const root = new THREE.Group();
+  root.name = 'cruise-shell';
+  const r = Math.max(rocketRadius * 0.84, 0.78);
+
+  // Adaptor docking bawah, badan bus jelajah berinsulasi emas, dan kerah aeroshell karbon
+  root.add(column(r * 0.94, r * 0.9, 0, 0.22, C.dark, 12));
+  root.add(column(r * 0.88, r * 0.88, 0.22, 1.2, C.hull, 12));
+  root.add(column(r * 0.91, r * 0.91, 0.42, 0.42, C.foil, 12));
+  root.add(column(r * 0.92, r * 0.92, 0.98, 0.14, C.stripe, 12));
+  root.add(column(r * 0.96, r * 0.92, 1.38, 0.18, C.soot, 12));
+
+  // Kerucut aeroshell pelindung & hidung sensor kapsul
+  root.add(column(r * 0.9, r * 0.56, 1.56, 1.05, C.hull, 12));
+  root.add(column(r * 0.56, r * 0.26, 2.61, 0.55, C.dark, 12));
+  root.add(column(r * 0.24, r * 0.08, 3.16, 0.3, C.steel, 10));
+
+  const wingLen = Math.max(1.25, r * 1.45);
+  const wingW = Math.max(0.45, r * 0.54);
+  const makeWing = (side: 1 | -1): THREE.Group => {
+    const g = new THREE.Group();
+    g.name = side < 0 ? 'cruise-wing-left' : 'cruise-wing-right';
+    g.position.set(side * r * 0.91, 0.95, 0);
+    g.add(box(0.05, wingLen, wingW * 0.2, C.steel, [0, wingLen * 0.5, 0]));
+    g.add(box(0.035, wingLen * 0.86, wingW, C.solar, [0, wingLen * 0.56, 0]));
+    g.add(box(0.04, 0.08, wingW * 0.96, C.hull, [0, wingLen * 0.56, 0]));
+    return g;
+  };
+  const leftWing = makeWing(-1);
+  const rightWing = makeWing(1);
+  root.add(leftWing, rightWing);
+  return { root, leftWing, rightWing };
 }
 
 /** Pasang lander (sudah dibangun) pada slot dan skalakan agar muat di dalam fairing. */

@@ -5,7 +5,7 @@
 export type JourneyPhase = 'launch' | 'orbit' | 'transfer' | 'capture' | 'landing' | 'ended';
 
 export const EARTH_FAR_SCALE = 0.08;
-export const DEST_SCALE_START = 0.12;
+export const DEST_SCALE_START = 0.05;
 /** Planet tujuan mulai tampak (tumbuh dari titik) saat peluncuran melewati `DEST_REVEAL_FROM`, penuh di `DEST_REVEAL_TO` (porsi lintasan). */
 export const DEST_REVEAL_FROM = 0.55;
 export const DEST_REVEAL_TO = 0.95;

@@ -283,4 +283,25 @@ describe('kontrol kecepatan pendaratan (landing speed control)', () => {
     expect(Math.abs(sim.landing!.vy)).toBeLessThanOrEqual(2.0);
     expect(Math.abs(sim.landing!.tiltDeg)).toBeLessThanOrEqual(5.0);
   });
+
+  it('Mars: tahap transfer tetap terpasang sampai tiba di capture (lander tidak terbang telanjang dari Bumi)', () => {
+    for (const rocketId of ['atlas_v', 'sls_block1']) {
+      const cfg = createFlightSimConfig({ ...mars, rocketId }, catalog);
+      const sim = new FlightSim(cfg);
+      const next = makePilot(sim, SKILLED);
+      const lastIdx = cfg.rocket.stages.length - 1;
+      const events: FlightEvent[] = [];
+      let ticks = 0;
+      while (!sim.ended && ticks++ < 60 * 1500) {
+        const stepped = sim.step(next(), FIXED_DT);
+        events.push(...stepped);
+        if (sim.phase === 'launch' || sim.phase === 'orbit' || sim.phase === 'transfer') {
+          expect(sim.staging.stages[lastIdx].phase, `${rocketId} melepas tahap transfer di ${sim.phase}`).not.toBe('jettisoned');
+        }
+      }
+      expect(sim.summary()!.failed, rocketId).toBe(false);
+      expect(events.some((e) => e.type === 'jettison' && e.stageIndex === lastIdx)).toBe(true);
+      expect(sim.summary()!.lateStageCount).toBe(0);
+    }
+  });
 });

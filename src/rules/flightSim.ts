@@ -259,7 +259,8 @@ export class FlightSim {
 
   get jettisonPrompt(): boolean {
     if (this.phase === 'capture' && !this.transferReleasedSpacecraft) return true;
-    return oldestDepletedIndex(this.staging) >= 0;
+    const depleted = oldestDepletedIndex(this.staging);
+    return depleted >= 0 && depleted < this.lastStage;
   }
 
   get landingCushionActive(): boolean {
@@ -548,7 +549,7 @@ export class FlightSim {
       ? this.throttle * accelFactor(this.staging)
       : 0;
 
-    const res = stepStaging(this.staging, dt, stagingThrottle, jettisonPressed && this.phase !== 'capture');
+    const res = stepStaging(this.staging, dt, stagingThrottle, jettisonPressed && this.phase !== 'capture', true);
     this.staging = res.state;
     events.push(...res.events);
 

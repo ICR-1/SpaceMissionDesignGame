@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { buildLander } from '../../src/gen/lander';
-import { buildRocket, mountLander } from '../../src/gen/rocket';
+import { buildCruiseShell, buildRocket, mountLander } from '../../src/gen/rocket';
 import { resolveAssembly } from '../../src/rules/catalog';
 import { defaultMission } from '../../src/core/missionBuilder';
 import { catalog } from '../rules/helpers';
@@ -88,5 +88,18 @@ describe('generator lander', () => {
     mountLander(rocket, lander);
     expect(lander.parent).toBe(rocket.landerSlot);
     expect(lander.scale.x).toBeLessThanOrEqual(0.6);
+  });
+  it('kapsul jelajah (cruise shell) muat di dalam fairing tiap roket dan memiliki sayap surya terlipat', () => {
+    for (const rocket of catalog.rockets) {
+      const m = buildRocket(rocket);
+      const shell = buildCruiseShell(m.radius);
+      m.landerSlot.add(shell.root);
+      m.root.updateWorldMatrix(true, true);
+      const fairingBox = new THREE.Box3().expandByObject(m.fairingLeft).expandByObject(m.fairingRight);
+      const shellBox = new THREE.Box3().setFromObject(shell.root);
+      expect(shellBox.min.x).toBeGreaterThanOrEqual(fairingBox.min.x - 0.05);
+      expect(shellBox.max.x).toBeLessThanOrEqual(fairingBox.max.x + 0.05);
+      expect(shellBox.max.y).toBeLessThanOrEqual(fairingBox.max.y + 0.05);
+    }
   });
 });
