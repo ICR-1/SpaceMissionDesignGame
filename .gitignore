@@ -11,3 +11,16 @@ mainm.png
 .commandcode/
 .vercel
 .env*
+
+# Dokumen & catatan kerja AI agent (.txt / .md)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+PROMPTS.md
+prompt_*.md
+VISUAL_POLISH.md
+AUDIT.md
+DECISIONS.md
+coord.txt
+docs/superpowers/
+.claude/
