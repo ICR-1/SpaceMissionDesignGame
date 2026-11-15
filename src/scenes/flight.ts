@@ -53,8 +53,10 @@ const EARTH_SPIN = 0.012;
 const DEST_SPIN = 0.03;
 const DEST_SEGMENTS = 64;
 const GROUND_DROP = 4000;
-/** Pergeseran tepi atas Bumi relatif terhadap posisi orbit [x, y, z] agar Bumi surut ke bawah-belakang layar di balik ekor roket. */
-const EARTH_DEPART_TOP_OFFSET: [number, number, number] = [360, -375, -1320];
+/** Pergeseran jangkar permukaan Bumi relatif terhadap posisi orbit [x, y, z] menuju kiri-bawah-jauh di balik ekor roket. */
+const EARTH_DEPART_ANCHOR_OFFSET: [number, number, number] = [170, -450, -1720];
+/** Arah normal sisi Bumi yang menghadap lintasan terbang kanan-atas (diagonal berlawanan dari surutnya Bumi). */
+const EARTH_DEPART_NORMAL: [number, number, number] = [0.566, 0.669, 0.474];
 const PLANET_FOLLOW = 3.5;
 const STAR_DOME_RADIUS = 3400;
 const DEST_RADIUS = 420;
@@ -927,17 +929,22 @@ export class FlightScene extends BaseScene {
     const capK = clamp(this.visCapFrac, 0, 1);
     if (this.earth) {
       const shrink = earthScale(earthDep);
+      const radiusNow = EARTH_RADIUS * shrink;
       this.earth.root.visible = scenePhase !== 'capture' && scenePhase !== 'landing' && scenePhase !== 'ended' && earthDep < 0.999;
       this.earth.spin(dt, EARTH_SPIN * (1 + 1.4 * Math.sin(earthDep * Math.PI)));
       const rise = smoothstep(0.55, 1, skyT);
-      // Turunkan tepi atas dengan pangkat > 1 agar Bumi tidak menyelam keluar di awal sebelum jarak kedalaman (-z) terbentuk,
-      // sehingga Bumi meluncur mulus menjauh ke bagian bawah-belakang layar seakan wahana melaju maju meninggalkannya.
-      const earthTopY = EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_TOP_OFFSET[1] * Math.pow(earthDep, 1.7);
+      // Putar vektor jangkar permukaan dari vertikal (0,1,0) menuju arah lintasan kanan-atas sehingga bola Bumi
+      // meluncur menjauh secara diagonal ke kiri-bawah-belakang, memberi kesan roket melaju maju ke planet tujuan.
+      const nx = EARTH_DEPART_NORMAL[0] * earthDep;
+      const ny = (1 - earthDep) + EARTH_DEPART_NORMAL[1] * earthDep;
+      const nz = EARTH_DEPART_NORMAL[2] * earthDep;
+      const nLen = Math.hypot(nx, ny, nz) || 1;
+      const anchorY = EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_ANCHOR_OFFSET[1] * Math.pow(earthDep, 1.5);
       this.earth.root.scale.setScalar(shrink);
       this.earth.root.position.set(
-        EARTH_DEPART_TOP_OFFSET[0] * earthDep,
-        earthTopY - EARTH_RADIUS * shrink,
-        EARTH_DEPART_TOP_OFFSET[2] * earthDep,
+        EARTH_DEPART_ANCHOR_OFFSET[0] * earthDep - radiusNow * (nx / nLen),
+        anchorY - radiusNow * (ny / nLen),
+        EARTH_DEPART_ANCHOR_OFFSET[2] * earthDep - radiusNow * (nz / nLen),
       );
     }
     if (this.destBody) {
