@@ -2,7 +2,7 @@ import type { SceneId } from './constants';
 
 /** Semua teks antarmuka (Bahasa Indonesia) di satu berkas (PRD 15). */
 export const STRINGS = {
-  title: 'ASTRA: Space Mission Architect',
+  title: 'ASTRA : Space Missions',
   hint: 'Tekan 1-5 untuk berpindah scene',
   scenes: {
     briefing: 'Briefing',
@@ -400,7 +400,7 @@ export const STORY_UI = {
 /** Layar judul (menu utama) yang muncul sekali setelah pemuatan awal. */
 export const TITLE_UI = {
   logo: 'ASTRA',
-  subtitle: 'Space Mission Architect',
+  subtitle: 'Space Missions',
   tagline: 'Rancang wahana, luncurkan roket, dan jelajahi Bulan serta Mars.',
   play: 'Main',
   settings: 'Pengaturan',
@@ -410,7 +410,7 @@ export const TITLE_UI = {
   aboutTitle: 'Tentang ASTRA',
   aboutSteps: ['Rancang', 'Luncurkan', 'Jelajahi'],
   aboutBody: [
-    'ASTRA: Space Mission Architect adalah game perancang misi antariksa. Rakit roket dan wahana dengan anggaran terbatas, terbangkan sampai mendarat, lalu jelajahi permukaan Bulan dan Mars untuk mengumpulkan data sains.',
+    'ASTRA : Space Missions adalah game perancang misi antariksa. Rakit roket dan wahana dengan anggaran terbatas, terbangkan sampai mendarat, lalu jelajahi permukaan Bulan dan Mars untuk mengumpulkan data sains.',
     'Semua model 3D, tekstur, musik, dan efek suara dibuat secara prosedural oleh kode, tanpa aset eksternal. Garis pantai Bumi memakai data Natural Earth (domain publik).',
     'Dibuat untuk hackathon NASA Space Apps. Badan Antariksa Khatulistiwa adalah badan fiksi.',
   ],

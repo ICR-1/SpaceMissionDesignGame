@@ -1,4 +1,4 @@
-# ASTRA: Space Mission Architect
+# ASTRA : Space Missions
 
 Game web 3D prosedural (detail tinggi bawaan, mode low-poly tersedia): rancang misi, terbangkan roket bertahap, jelajahi permukaan Bulan dan Mars. Dibuat untuk hackathon NASA Space Apps. Badan antariksa dalam game adalah fiksi (Badan Antariksa Khatulistiwa).
 

@@ -1,4 +1,4 @@
-# CREDITS — ASTRA: Space Mission Architect
+# CREDITS — ASTRA : Space Missions
 
 ## Pernyataan aset
 **Tanpa aset gambar, model 3D, font, atau audio eksternal.** Proyek ini tidak memuat dan tidak mengunduh model 3D (`.gltf`, `.obj`, `.fbx`), tekstur gambar (`.png`, `.jpg`), font web, atau berkas audio (`.mp3`, `.wav`). Satu-satunya data pihak ketiga adalah garis pantai dunia (lihat *Data geografi* di bawah), tertanam sebagai kode.
