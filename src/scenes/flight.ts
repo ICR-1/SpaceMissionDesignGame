@@ -53,8 +53,10 @@ const EARTH_SPIN = 0.012;
 const DEST_SPIN = 0.03;
 const DEST_SEGMENTS = 64;
 const GROUND_DROP = 4000;
-/** Perpindahan Bumi (x, y, z) saat transfer; bergerak mundur (-x) dan turun (-y) di balik ekor roket seiring wahana melaju maju. */
-const EARTH_DEPART_OFFSET: [number, number, number] = [-1200, -500, 0];
+/** Pergeseran tepi atas Bumi relatif terhadap posisi orbit [x, y, z] selama transfer agar bola Bumi surut diagonal ke kiri-belakang di balik ekor api. */
+const EARTH_DEPART_TOP_OFFSET: [number, number, number] = [200, -40, -1500];
+const PLANET_FOLLOW = 3.5;
+const STAR_DOME_RADIUS = 3400;
 const DEST_RADIUS = 420;
 const RESULT_DELAY_SEC = 1.2;
 /** Setelah ledakan, panel hasil menunggu lebih lama agar ledakan sempat terlihat. */
@@ -93,7 +95,7 @@ const LIGHT_LANDING = { hemi: 0.55, sun: 1.7 } as const;
  * Posisi planet tujuan di koridor jalur depan hidung roket (+x).
  * Bergerak mendekat secara spasial sepanjang transfer (START -> END) sehingga terasa nyata didekati.
  */
-const DEST_BODY_POS_START: [number, number, number] = [1550, 40, -820];
+const DEST_BODY_POS_START: [number, number, number] = [2350, 120, -1350];
 const DEST_BODY_POS_END: [number, number, number] = [1250, 20, -650];
 const DEST_BODY_POS_CAPTURE: [number, number, number] = [820, -25, -420];
 /** Kabut hitam di cakrawala Bulan pada ketinggian awal landing agar tepi cakram tidak terlihat terpotong di angkasa gelap. */
@@ -103,7 +105,7 @@ const LANDED_LEVEL_SEC = 0.4;
 const CAM_HEADING_DEG = 40;
 const CAM_HEADING_DIST_BOOST = 0.3;
 /** Kecepatan aliran debu antariksa (satuan/detik) yang memberi kesan roket maju. */
-const DUST_FLOW = { launch: 38, orbit: 8, transfer: 55 } as const;
+const DUST_FLOW = { launch: 38, orbit: 14, transferCoast: 48, transferBurn: 95, capture: 26 } as const;
 const DUST_OPACITY = 0.85;
 /** Satu satuan roket = ini kali satuan scene pendaratan (lander di fairing 0,6 menjadi lander dunia 2,6). */
 const ROCKET_TO_LANDING = 1 / LAUNCH_WORLD_SCALE;
@@ -192,6 +194,9 @@ export class FlightScene extends BaseScene {
   private lean = 0;
   private yaw = 0;
   private worldDrop = 0;
+  private visEarthDep = 0;
+  private visDestDep = 0;
+  private visCapFrac = 0;
   /** Posisi lateral titik pendaratan di terrain (m, <= 0): -LANDING_LATERAL_M di awal, naik ke 0 (hub) sesuai kecepatan horizontal. */
   private padX = -LANDING_LATERAL_M;
   private landedLevelT = 0;
@@ -231,7 +236,7 @@ export class FlightScene extends BaseScene {
     const dest = this.assembly.destination;
     this.hemi.intensity = LIGHT_LAUNCH.hemi;
     this.sun.intensity = LIGHT_LAUNCH.sun;
-    this.stars = createStars(cfg.seed);
+    this.stars = createStars(cfg.seed, undefined, STAR_DOME_RADIUS);
     this.scene.add(this.stars);
     this.spaceDust = new SpaceDust(cfg.seed);
     this.scene.add(this.spaceDust.points);
@@ -305,6 +310,9 @@ export class FlightScene extends BaseScene {
     this.lean = 0;
     this.yaw = 0;
     this.worldDrop = 0;
+    this.visEarthDep = 0;
+    this.visDestDep = 0;
+    this.visCapFrac = 0;
     this.padX = -LANDING_LATERAL_M;
     this.landedLevelT = 0;
     this.sepCamKick = 0;
@@ -892,59 +900,74 @@ export class FlightScene extends BaseScene {
         this.world.position.z += dHoriz * Math.sin(yawRad);
       }
     }
-    const targetDistM = this.assembly.destination.id === 'mars' ? ORBITAL.mars.transferDistanceM : ORBITAL.moon.distanceM;
+    const destSpec = this.assembly.destination.id === 'mars' ? ORBITAL.mars : null;
+    const targetDistM = destSpec ? destSpec.transferDistanceM : ORBITAL.moon.distanceM;
+    const soiEntryM = (destSpec ? destSpec.soiRadiusM : ORBITAL.moon.soiRadiusM) * 0.1;
     const transferBurnFrac = clamp(sim.transferDoneDvMs / Math.max(1, sim.transferTargetDvMs), 0, 1);
-    const coastFrac = clamp(1 - sim.distanceToTargetM / Math.max(1, targetDistM), 0, 1);
+    const coastFrac = clamp((targetDistM - sim.distanceToTargetM) / Math.max(1, targetDistM - soiEntryM), 0, 1);
     const captureFrac = clamp(sim.captureDoneDvMs / Math.max(1, sim.captureTargetDvMs), 0, 1);
-    const burned = sim.phase === 'transfer'
-      ? clamp(transferBurnFrac * 0.25 + coastFrac * 0.75, 0, 1)
-      : sim.phase === 'capture' || sim.phase === 'landing' || sim.phase === 'ended'
-        ? 1
-        : 0;
-    const destProgress = sim.phase === 'capture' ? captureFrac : burned;
-    // Perjalanan transfer: Bumi mengecil dan menjauh perlahan (tidak lenyap seketika), planet tujuan tumbuh dari titik kecil.
     // Roket yang jatuh saat peluncuran berfase 'ended', tetapi adegannya masih di Bumi: perlakukan sebagai 'launch'
     // agar planet tujuan tidak melompat ke ukuran/posisi akhir (bulan bulat di dalam Bumi).
     const scenePhase = sim.crashed ? 'launch' : sim.phase;
-    const departure = departureProgress(scenePhase, burned);
+    // Pisahkan laju visual: Bumi sudah surut nyata sejak fase burn TLI/TMI (saat menjauh dari orbit rendah),
+    // sedangkan planet tujuan terus mendekat mulus sepanjang burn, coast, dan capture tanpa jeda mati atau sentakan warp.
+    const earthTarget = scenePhase === 'transfer'
+      ? departureProgress('transfer', clamp(transferBurnFrac * 0.58 + coastFrac * 0.42, 0, 1))
+      : scenePhase === 'capture' || scenePhase === 'landing' || scenePhase === 'ended' ? 1 : 0;
+    const destTarget = scenePhase === 'transfer'
+      ? departureProgress('transfer', clamp(transferBurnFrac * 0.38 + coastFrac * 0.62, 0, 1))
+      : scenePhase === 'capture' || scenePhase === 'landing' || scenePhase === 'ended' ? 1 : 0;
+    const capTarget = scenePhase === 'capture' ? captureFrac : scenePhase === 'landing' || scenePhase === 'ended' ? 1 : 0;
+    const planK = dt === 0 ? 1 : 1 - Math.exp(-PLANET_FOLLOW * dt);
+    this.visEarthDep += (earthTarget - this.visEarthDep) * planK;
+    this.visDestDep += (destTarget - this.visDestDep) * planK;
+    this.visCapFrac += (capTarget - this.visCapFrac) * planK;
+    const earthDep = clamp(this.visEarthDep, 0, 1);
+    const destDep = clamp(this.visDestDep, 0, 1);
+    const capK = clamp(this.visCapFrac, 0, 1);
     if (this.earth) {
-      const shrink = earthScale(departure);
-      this.earth.root.visible = scenePhase !== 'capture' && scenePhase !== 'landing' && scenePhase !== 'ended' && departure < 1;
-      this.earth.spin(dt, EARTH_SPIN);
+      const shrink = earthScale(earthDep);
+      this.earth.root.visible = scenePhase !== 'capture' && scenePhase !== 'landing' && scenePhase !== 'ended' && earthDep < 0.995;
+      this.earth.spin(dt, EARTH_SPIN * (1 + 1.4 * Math.sin(earthDep * Math.PI)));
       const rise = smoothstep(0.55, 1, skyT);
-      // Bumi menyusut sambil bergeser ke belakang (mundur sepanjang -x dan turun -y di balik semburan mesin)
-      // sehingga roket terasa melaju maju meninggalkan Bumi.
+      // Jangkar tepi atas Bumi surut halus ke kiri-belakang sambil mengecil ke pusatnya
+      // sehingga lengkungan Bumi tidak menghilang ke bawah layar atau memantul saat menyusut.
+      const earthTopY = EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_TOP_OFFSET[1] * earthDep;
       this.earth.root.scale.setScalar(shrink);
       this.earth.root.position.set(
-        EARTH_DEPART_OFFSET[0] * departure,
-        -EARTH_RADIUS + EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_OFFSET[1] * departure,
-        EARTH_DEPART_OFFSET[2] * departure,
+        EARTH_DEPART_TOP_OFFSET[0] * earthDep,
+        earthTopY - EARTH_RADIUS * shrink,
+        EARTH_DEPART_TOP_OFFSET[2] * earthDep,
       );
     }
     if (this.destBody) {
-      const s = destScale(scenePhase, departure, destProgress, sim.crashed ? skyT : sim.progress);
+      const baseScale = destScale(scenePhase === 'capture' ? 'transfer' : scenePhase, destDep, capK, sim.crashed ? skyT : sim.progress);
+      const capScaleExtra = scenePhase === 'capture' || scenePhase === 'landing' || scenePhase === 'ended'
+        ? (destScale('capture', 1, capK) - destScale('transfer', 1, 1))
+        : 0;
+      const s = baseScale + capScaleExtra;
       this.destBody.root.visible = s > 0.001;
       this.destBody.root.scale.setScalar(Math.max(s, 0.001));
-      if (scenePhase === 'capture' || scenePhase === 'landing' || scenePhase === 'ended') {
-        const capK = scenePhase === 'capture' ? captureFrac : 1;
-        this.destBody.root.position.set(
-          DEST_BODY_POS_END[0] + (DEST_BODY_POS_CAPTURE[0] - DEST_BODY_POS_END[0]) * capK,
-          DEST_BODY_POS_END[1] + (DEST_BODY_POS_CAPTURE[1] - DEST_BODY_POS_END[1]) * capK,
-          DEST_BODY_POS_END[2] + (DEST_BODY_POS_CAPTURE[2] - DEST_BODY_POS_END[2]) * capK,
-        );
-      } else {
-        this.destBody.root.position.set(
-          DEST_BODY_POS_START[0] + (DEST_BODY_POS_END[0] - DEST_BODY_POS_START[0]) * departure,
-          DEST_BODY_POS_START[1] + (DEST_BODY_POS_END[1] - DEST_BODY_POS_START[1]) * departure,
-          DEST_BODY_POS_START[2] + (DEST_BODY_POS_END[2] - DEST_BODY_POS_START[2]) * departure,
-        );
-      }
+      this.destBody.root.position.set(
+        DEST_BODY_POS_START[0] + (DEST_BODY_POS_END[0] - DEST_BODY_POS_START[0]) * destDep + (DEST_BODY_POS_CAPTURE[0] - DEST_BODY_POS_END[0]) * capK,
+        DEST_BODY_POS_START[1] + (DEST_BODY_POS_END[1] - DEST_BODY_POS_START[1]) * destDep + (DEST_BODY_POS_CAPTURE[1] - DEST_BODY_POS_END[1]) * capK,
+        DEST_BODY_POS_START[2] + (DEST_BODY_POS_END[2] - DEST_BODY_POS_START[2]) * destDep + (DEST_BODY_POS_CAPTURE[2] - DEST_BODY_POS_END[2]) * capK,
+      );
       this.destBody.spin(dt, DEST_SPIN);
     }
 
-    // Debu antariksa mengalir ke belakang roket (berlawanan arah hidung) selama di luar atmosfer.
+    // Debu antariksa mengalir ke belakang roket selama di luar atmosfer (tetap mengalir mulus saat coast agar kecepatan terasa).
     if (this.spaceDust) {
-      const flow = sim.phase === 'launch' ? DUST_FLOW.launch * sim.throttle : sim.phase === 'orbit' ? DUST_FLOW.orbit : sim.phase === 'transfer' ? DUST_FLOW.transfer * sim.throttle : 0;
+      const warpDust = sim.phase === 'transfer' ? Math.log10(Math.max(1, sim.timeWarp)) * 14 : 0;
+      const flow = sim.phase === 'launch'
+        ? DUST_FLOW.launch * sim.throttle
+        : sim.phase === 'orbit'
+          ? DUST_FLOW.orbit
+          : sim.phase === 'transfer'
+            ? DUST_FLOW.transferCoast + DUST_FLOW.transferBurn * sim.throttle + warpDust
+            : sim.phase === 'capture'
+              ? DUST_FLOW.capture * (0.4 + 0.6 * sim.throttle)
+              : 0;
       const visible = sim.crashed ? 0 : smoothstep(0.55, 0.85, skyT) * DUST_OPACITY;
       this.spaceDust.update(dt, this.axisDir().multiplyScalar(-flow), this.camTarget, visible);
     }

@@ -12,18 +12,25 @@ export const DEST_REVEAL_TO = 0.95;
 export const DEST_SCALE_END = 1.6;
 export const DEST_SCALE_CAPTURE = 2.0;
 
+const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
+
 const smooth01 = (x: number): number => {
-  const t = Math.min(1, Math.max(0, x));
+  const t = clamp01(x);
   return t * t * (3 - 2 * t);
 };
 
-/** 0 = masih di orbit Bumi, 1 = transfer selesai; `burned` = bagian bahan bakar tahap transfer yang sudah terpakai. */
+/** Kurva sinus kuadran I: langsung bergerak halus sejak awal tanpa jeda mati lalu melandai tenang saat tiba. */
+const easeOutSine = (x: number): number => Math.sin(clamp01(x) * Math.PI * 0.5);
+
+/** 0 = masih di orbit Bumi, 1 = transfer selesai; `burned` = bagian kemajuan burn/coast transfer yang sudah ditempuh. */
 export function departureProgress(phase: JourneyPhase, burned: number): number {
-  if (phase === 'transfer') return smooth01(burned);
+  if (phase === 'transfer') return easeOutSine(burned);
   return phase === 'capture' || phase === 'landing' || phase === 'ended' ? 1 : 0;
 }
 
-export const earthScale = (departure: number): number => 1 - departure * (1 - EARTH_FAR_SCALE);
+/** Skala Bumi menurun dengan kurva perspektif (cepat menyusut saat meninggalkan LEO lalu melandai ke titik jauh). */
+export const earthScale = (departure: number): number =>
+  EARTH_FAR_SCALE + (1 - EARTH_FAR_SCALE) * Math.pow(1 - clamp01(departure), 1.8);
 
 /** Skala planet tujuan: tumbuh sepanjang transfer, lalu membesar lagi saat penangkapan orbit. */
 export function destScale(phase: JourneyPhase, departure: number, burned: number, launchProgress = 1): number {

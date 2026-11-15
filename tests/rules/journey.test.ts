@@ -37,6 +37,12 @@ describe('perjalanan transfer (visual)', () => {
     }
     expect(destScale('transfer', 1, 1)).toBeCloseTo(DEST_SCALE_END, 10);
   });
+  it('awal burn transfer langsung menggerakkan menjauhnya Bumi dan pendekatan tujuan tanpa jeda mati', () => {
+    const depEarly = departureProgress('transfer', 0.1);
+    expect(depEarly).toBeGreaterThan(0.14);
+    expect(earthScale(depEarly)).toBeLessThan(0.8);
+    expect(destScale('transfer', depEarly, 0.1)).toBeGreaterThan(DEST_SCALE_START + 0.18);
+  });
   it('penangkapan melanjutkan dari akhir transfer sampai skala penangkapan', () => {
     expect(destScale('capture', 1, 0)).toBe(DEST_SCALE_END);
     expect(destScale('capture', 1, 1)).toBe(DEST_SCALE_CAPTURE);
