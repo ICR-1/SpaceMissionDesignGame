@@ -115,6 +115,7 @@ export function coastWarpIndex(etaSec: number): number {
 const SEED_SALT = 0x9e3779b9;
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
+const coastSpeedFor = (id: BodyId): number => (id === 'mars' ? 32_000 : 2_150);
 
 function stageDefaults(stage: Stage, payloadKg: number, index: number, totalStages: number): {
   dryMassKg: number;
@@ -473,7 +474,7 @@ export class FlightSim {
     this.lvlh = attitudeToLvlh(this.att, this.r);
     this.pitchDeg = clamp(this.lvlh.pitchDeg, -90, 90);
     this.navball = computeNavballVectors(this.r, this.v, this.maneuverWorldDir);
-    const coastSpeedMs = this.targetBodyId === 'mars' ? 14_500 : 1_850;
+    const coastSpeedMs = coastSpeedFor(this.targetBodyId);
     const soiStop = BODIES[this.targetBodyId].soiRadiusM * 0.1;
     this.coastEtaSec = this.phase === 'transfer' && this.coastSubPhase
       ? Math.max(0, (this.distanceToTargetM - soiStop) / coastSpeedMs)
@@ -761,7 +762,7 @@ export class FlightSim {
     }
 
     // Fase Coast antarplanet / translunar: melintasi jarak nyata ke SOI target!
-    const coastSpeedMs = this.targetBodyId === 'mars' ? 14_500 : 1_850;
+    const coastSpeedMs = coastSpeedFor(this.targetBodyId);
     this.distanceToTargetM = Math.max(0, this.distanceToTargetM - coastSpeedMs * dt);
     const next = stepOrbitRK4({
       r: this.r, v: this.v, massKg: mass, thrustN: 0, noseDir: nose, cdAreaM2: 0, body: this.body,

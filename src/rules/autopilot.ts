@@ -116,10 +116,10 @@ export function makeAutopilot(sim: FlightSim, opts: AutopilotOptions = {}): () =
           }
           return { key: `transfer-coast-${coastRampIdx}`, index: coastRampIdx };
         }
-        // Hitung mundur 1x sebelum TLI/TMI menyala, lalu 5x physics warp saat burn.
+        // Hitung mundur 1x sebelum TLI/TMI menyala, lalu 10x physics warp saat burn agar transfer terasa sigap.
         return sim.phaseTimeSec < FLIGHT.tliCountdownSec
           ? { key: 'transfer-countdown', index: 0 }
-          : { key: 'transfer-burn', index: 2 };
+          : { key: 'transfer-burn', index: 3 };
       }
       case 'capture':
         // Detik pertama capture 1x agar kedatangan terasa halus, lalu 5x untuk burn penangkapan.

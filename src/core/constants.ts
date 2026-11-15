@@ -167,7 +167,7 @@ export const FLIGHT = {
   /** Lama orbit parkir (detik waktu simulasi). Autopilot memakai warp 5x, jadi sekitar 12 detik nyata. */
   orbitParkSec: 60,
   /** Hitung mundur (detik, 1x) di awal fase transfer sebelum burn TLI/TMI menyala, agar SAS sempat mantap menghadap prograde. */
-  tliCountdownSec: 4,
+  tliCountdownSec: 3,
   /** Detik pertama fase capture dijalankan pada 1x agar tiba di planet tujuan terasa halus. */
   captureSettleSec: 4,
   /** Tangga warp coast: pilih warp terbesar yang masih menyisakan minimal ini detik nyata sampai tiba, sehingga warp turun bertahap. */

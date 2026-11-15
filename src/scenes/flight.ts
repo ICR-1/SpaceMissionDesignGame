@@ -53,8 +53,8 @@ const EARTH_SPIN = 0.012;
 const DEST_SPIN = 0.03;
 const DEST_SEGMENTS = 64;
 const GROUND_DROP = 4000;
-/** Pergeseran jangkar Bumi saat transfer langsung ke belakang-bawah di jalur kamera sehingga Bumi menyusut mundur, bukan menggeser ke kiri. */
-const EARTH_DEPART_ANCHOR_OFFSET: [number, number, number] = [1741, -271, -1334];
+/** Pergeseran jangkar Bumi saat transfer turun lurus ke belakang-bawah sehingga Bumi keluar melewati tepi bawah layar. */
+const EARTH_DEPART_ANCHOR_OFFSET: [number, number, number] = [668, -873, -486];
 const PLANET_FOLLOW = 3.5;
 const STAR_DOME_RADIUS = 3400;
 const DEST_RADIUS = 420;
@@ -937,10 +937,10 @@ export class FlightScene extends BaseScene {
     // Roket yang jatuh saat peluncuran berfase 'ended', tetapi adegannya masih di Bumi: perlakukan sebagai 'launch'
     // agar planet tujuan tidak melompat ke ukuran/posisi akhir (bulan bulat di dalam Bumi).
     const scenePhase = sim.crashed ? 'launch' : sim.phase;
-    // Pisahkan laju visual terhadap jarak nyata: saat burn TLI/TMI di dekat Bumi, Bumi tetap terlihat surut di belakang
+    // Pisahkan laju visual terhadap jarak nyata: sepanjang burn TLI/TMI Bumi turun keluar melewati tepi bawah layar
     // dan planet tujuan masih jauh & kecil; baru saat coast memperpendek jutaan km jarak, planet tujuan membesar penuh.
     const earthTarget = scenePhase === 'transfer'
-      ? departureProgress('transfer', clamp(transferBurnFrac * 0.3 + coastFrac * 0.7, 0, 1))
+      ? departureProgress('transfer', clamp(transferBurnFrac * 0.48 + coastFrac * 0.52, 0, 1))
       : scenePhase === 'capture' || scenePhase === 'landing' || scenePhase === 'ended' ? 1 : 0;
     const destTarget = scenePhase === 'transfer'
       ? departureProgress('transfer', clamp(transferBurnFrac * 0.06 + coastFrac * 0.94, 0, 1))
