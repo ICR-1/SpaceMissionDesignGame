@@ -55,8 +55,6 @@ const DEST_SEGMENTS = 64;
 const GROUND_DROP = 4000;
 /** Perpindahan Bumi (x, y, z) saat transfer; bergerak mundur (-x) dan turun (-y) di balik ekor roket seiring wahana melaju maju. */
 const EARTH_DEPART_OFFSET: [number, number, number] = [-1200, -500, 0];
-/** Eksponen kurva naik: kecil di awal agar lepas landas terasa berat lalu makin cepat. */
-const GROUND_DROP_EXP = 1.6;
 const DEST_RADIUS = 420;
 const RESULT_DELAY_SEC = 1.2;
 /** Setelah ledakan, panel hasil menunggu lebih lama agar ledakan sempat terlihat. */
@@ -131,7 +129,7 @@ const PAD_SMOKE = {
   size0: 2.4, size1: [14, 24], drag: 0.9, buoyancy: 0.8, floorY: 0.6, gray: [0.8, 0.97], spin: 0.25,
 } as const;
 const TRAIL_SMOKE = {
-  pool: 1000, minAltitude: 1.5, spacing: 0.9, maxPerFrame: 10, startOffset: 1.5, speed: [3, 7], jitter: 1.5, life: [7, 10],
+  pool: 1000, minAltitude: 1.5, spacing: 0.9, maxPerFrame: 18, startOffset: 1.5, speed: [3, 7], jitter: 1.5, life: [7, 10],
   size0: 5, size1: [12, 20], drag: 0.5, buoyancy: 0.35, gray: [0.84, 0.95], spin: 0.3,
 } as const;
 /** Lampu jingga di bawah nozzle yang menerangi landasan, menara, dan badan roket saat mesin menyala. */
@@ -192,6 +190,8 @@ export class FlightScene extends BaseScene {
   private explosions: Explosion[] = [];
   private vrng: Rng = createRng(1);
   private lean = 0;
+  private yaw = 0;
+  private worldDrop = 0;
   /** Posisi lateral titik pendaratan di terrain (m, <= 0): -LANDING_LATERAL_M di awal, naik ke 0 (hub) sesuai kecepatan horizontal. */
   private padX = -LANDING_LATERAL_M;
   private landedLevelT = 0;
@@ -303,6 +303,8 @@ export class FlightScene extends BaseScene {
       }
     });
     this.lean = 0;
+    this.yaw = 0;
+    this.worldDrop = 0;
     this.padX = -LANDING_LATERAL_M;
     this.landedLevelT = 0;
     this.sepCamKick = 0;
@@ -858,9 +860,12 @@ export class FlightScene extends BaseScene {
     const targetLean = leaning ? 90 - sim.lvlh.pitchDeg : 90 - sim.aimPitchDeg;
     this.lean += (targetLean - this.lean) * (1 - Math.exp(-LEAN_FOLLOW * dt));
     if (dt === 0) this.lean = targetLean;
-    const yaw = leaning ? sim.lvlh.headingDeg - 90 : sim.aimYawDeg;
+    // Tahan yaw saat tegak agar singularitas atan2 heading di zenith tidak memutar roket di awal terbang
+    const rawYaw = leaning ? (targetLean < 0.5 ? this.yaw : sim.lvlh.headingDeg - 90) : sim.aimYawDeg;
+    const yawDelta = ((((rawYaw - this.yaw + 180) % 360) + 360) % 360) - 180;
+    this.yaw = dt === 0 ? rawYaw : this.yaw + yawDelta * (1 - Math.exp(-LEAN_FOLLOW * dt));
     this.pivot.rotation.order = 'YXZ';
-    this.pivot.rotation.set(0, THREE.MathUtils.degToRad(yaw), -THREE.MathUtils.degToRad(this.lean));
+    this.pivot.rotation.set(0, THREE.MathUtils.degToRad(this.yaw), -THREE.MathUtils.degToRad(this.lean));
     this.pivot.updateMatrixWorld(true);
 
     const skyT = sim.phase === 'launch' || sim.crashed ? sim.progress : 1;
@@ -870,8 +875,22 @@ export class FlightScene extends BaseScene {
     if (this.stars) (this.stars.material as THREE.PointsMaterial).opacity = smoothstep(0.2, 0.65, skyT);
     if (this.world) {
       this.world.visible = skyT < 0.85;
-      this.world.position.y = this.padY - (skyT ** GROUND_DROP_EXP) * GROUND_DROP;
-      if (sim.throttle > 0) this.world.position.x -= dt * 30 * Math.sin(THREE.MathUtils.degToRad(this.lean));
+      // Turunkan dunia 1:1 terhadap ketinggian fisik di dekat landasan agar lepas landas terlihat naik lurus,
+      // lalu mampatkan sebelum CAMERA_FAR dan geser datar sebanding dengan sudut miring roket.
+      const altUnits = Math.max(0, sim.kepler.altitudeM) * LAUNCH_WORLD_SCALE;
+      const drop = sim.phase === 'launch' || sim.crashed
+        ? GROUND_DROP * (1 - Math.exp(-altUnits / GROUND_DROP))
+        : GROUND_DROP;
+      const dDrop = drop - this.worldDrop;
+      this.worldDrop = drop;
+      this.world.position.y = this.padY - drop;
+      if (dDrop > 0 && this.lean > 0.05) {
+        const leanRad = THREE.MathUtils.degToRad(Math.min(72, this.lean));
+        const yawRad = THREE.MathUtils.degToRad(this.yaw);
+        const dHoriz = dDrop * Math.tan(leanRad);
+        this.world.position.x -= dHoriz * Math.cos(yawRad);
+        this.world.position.z += dHoriz * Math.sin(yawRad);
+      }
     }
     const targetDistM = this.assembly.destination.id === 'mars' ? ORBITAL.mars.transferDistanceM : ORBITAL.moon.distanceM;
     const transferBurnFrac = clamp(sim.transferDoneDvMs / Math.max(1, sim.transferTargetDvMs), 0, 1);

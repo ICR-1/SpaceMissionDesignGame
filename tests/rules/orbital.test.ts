@@ -15,6 +15,7 @@ import {
   rotateAttitudeLocal,
   stepOrbitRK4,
   vec3,
+  vecAdd,
   vecDot,
   vecLen,
   vecScale,
@@ -125,6 +126,20 @@ describe('mekanika orbit 3D Keplerian (orbital.ts)', () => {
     const kPad = computeKeplerian(init.r, init.v, BODIES.earth);
     const gPad = ascentGuidanceDir(init.r, init.v, kPad, BODIES.earth);
     expect(vecDot(gPad, up)).toBeCloseTo(1, 4);
+
+    // Saat masih terbang awal (< 2.5 km) meski sudah melaju cepat, roket tetap diarahkan tegak lurus ke atas
+    const rLow = vecScale(init.r, (BODIES.earth.radiusM + 1_500) / BODIES.earth.radiusM);
+    const vLow = vecAdd(init.v, vecScale(up, 180));
+    const gLow = ascentGuidanceDir(rLow, vLow, computeKeplerian(rLow, vLow, BODIES.earth), BODIES.earth);
+    expect(vecDot(gLow, up)).toBeCloseTo(1, 4);
+    expect(Math.abs(vecDot(gLow, east))).toBeLessThan(1e-4);
+
+    // Setelah melewati ketinggian awal, baru mulai belok mulus ke Timur menuju orbit
+    const rTurn = vecScale(init.r, (BODIES.earth.radiusM + 4_000) / BODIES.earth.radiusM);
+    const vTurn = vecAdd(init.v, vecScale(up, 300));
+    const gTurn = ascentGuidanceDir(rTurn, vTurn, computeKeplerian(rTurn, vTurn, BODIES.earth), BODIES.earth);
+    expect(vecDot(gTurn, east)).toBeGreaterThan(0.05);
+    expect(vecDot(gTurn, up)).toBeGreaterThan(0.9);
 
     const rClimb = vecScale(vec3(init.r.x, init.r.y, init.r.z), (BODIES.earth.radiusM + 40_000) / BODIES.earth.radiusM);
     const vClimb = vecScale(east, 1800);

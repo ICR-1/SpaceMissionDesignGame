@@ -555,7 +555,11 @@ export function burnTimeSec(m0Kg: number, dvMs: number, thrustN: number, ispS: n
   return fuelNeeded / mDot;
 }
 
-/** Pemandu pendakian tertutup (closed-loop gravity turn + PEG apoapsis hold ke Timur). */
+const TURN_START_ALT_M = 2_500;
+const TURN_END_SPAN_M = 97_500;
+const TURN_MIN_AIRSPEED_MS = 100;
+
+/** Pemandu pendakian tertutup (pendakian vertikal awal lalu gravity turn mulus + PEG apoapsis hold ke Timur). */
 export function ascentGuidanceDir(
   r: Vec3,
   v: Vec3,
@@ -568,7 +572,7 @@ export function ascentGuidanceDir(
   const airSpeed = vecLen(vecSub(v, vAtmo));
   const alt = kepler.altitudeM;
 
-  if (alt < 500 || airSpeed < 60) return up;
+  if (alt < TURN_START_ALT_M || airSpeed < TURN_MIN_AIRSPEED_MS) return up;
 
   const radialVel = vecDot(v, up);
   let targetPitchDeg: number;
@@ -581,9 +585,9 @@ export function ascentGuidanceDir(
       targetPitchDeg = clamp(-radialVel * 0.04, -3, 6);
     }
   } else {
-    // Gravity turn mulus berdasarkan ketinggian + kendali tertutup waktu-ke-apoapsis
-    const altFrac = clamp((alt - 500) / 95_000, 0, 1);
-    targetPitchDeg = 84 - 75 * Math.pow(altFrac, 0.56);
+    // Gravity turn mulus dari 90° setelah pendakian vertikal + kendali tertutup waktu-ke-apoapsis
+    const altFrac = clamp((alt - TURN_START_ALT_M) / TURN_END_SPAN_M, 0, 1);
+    targetPitchDeg = 90 - 81 * Math.pow(altFrac, 0.5);
 
     if (!kepler.hyperbolic && alt > 15_000 && Number.isFinite(kepler.timeToApoapsisSec)) {
       const tta = kepler.timeToApoapsisSec;
@@ -593,7 +597,7 @@ export function ascentGuidanceDir(
     if (radialVel < 15 && alt < 130_000) {
       targetPitchDeg = Math.max(targetPitchDeg, 22);
     }
-    targetPitchDeg = clamp(targetPitchDeg, 3, 88);
+    targetPitchDeg = clamp(targetPitchDeg, 3, 90);
   }
 
   const rad = targetPitchDeg * DEG_TO_RAD;
