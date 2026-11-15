@@ -53,8 +53,8 @@ const EARTH_SPIN = 0.012;
 const DEST_SPIN = 0.03;
 const DEST_SEGMENTS = 64;
 const GROUND_DROP = 4000;
-/** Pergeseran tepi atas Bumi relatif terhadap posisi orbit [x, y, z] selama transfer agar bola Bumi surut diagonal ke kiri-belakang di balik ekor api. */
-const EARTH_DEPART_TOP_OFFSET: [number, number, number] = [200, -40, -1500];
+/** Pergeseran tepi atas Bumi relatif terhadap posisi orbit [x, y, z] agar Bumi surut ke bawah-belakang layar di balik ekor roket. */
+const EARTH_DEPART_TOP_OFFSET: [number, number, number] = [360, -375, -1320];
 const PLANET_FOLLOW = 3.5;
 const STAR_DOME_RADIUS = 3400;
 const DEST_RADIUS = 420;
@@ -927,12 +927,12 @@ export class FlightScene extends BaseScene {
     const capK = clamp(this.visCapFrac, 0, 1);
     if (this.earth) {
       const shrink = earthScale(earthDep);
-      this.earth.root.visible = scenePhase !== 'capture' && scenePhase !== 'landing' && scenePhase !== 'ended' && earthDep < 0.995;
+      this.earth.root.visible = scenePhase !== 'capture' && scenePhase !== 'landing' && scenePhase !== 'ended' && earthDep < 0.999;
       this.earth.spin(dt, EARTH_SPIN * (1 + 1.4 * Math.sin(earthDep * Math.PI)));
       const rise = smoothstep(0.55, 1, skyT);
-      // Jangkar tepi atas Bumi surut halus ke kiri-belakang sambil mengecil ke pusatnya
-      // sehingga lengkungan Bumi tidak menghilang ke bawah layar atau memantul saat menyusut.
-      const earthTopY = EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_TOP_OFFSET[1] * earthDep;
+      // Turunkan tepi atas dengan pangkat > 1 agar Bumi tidak menyelam keluar di awal sebelum jarak kedalaman (-z) terbentuk,
+      // sehingga Bumi meluncur mulus menjauh ke bagian bawah-belakang layar seakan wahana melaju maju meninggalkannya.
+      const earthTopY = EARTH_TOP_Y + (EARTH_ORBIT_TOP_Y - EARTH_TOP_Y) * rise + EARTH_DEPART_TOP_OFFSET[1] * Math.pow(earthDep, 1.7);
       this.earth.root.scale.setScalar(shrink);
       this.earth.root.position.set(
         EARTH_DEPART_TOP_OFFSET[0] * earthDep,
