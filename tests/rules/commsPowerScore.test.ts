@@ -4,6 +4,7 @@ import { rateTotal, signalQuality, uplinkDataD, uplinkFactor } from '../../src/r
 import { dayPowerW, isDaytime, productionW, rtgPowerW, stepBatteryWh } from '../../src/rules/power';
 import { computeScore, starsFor, type ScoreInput } from '../../src/rules/score';
 import { fuelRemainingKg, transferBurnCostMs, tsiolkovskyDv } from '../../src/rules/deltav';
+import { G0 } from '../../src/core/constants';
 import { catalog, moonExample } from './helpers';
 
 const moon = resolveAssembly(moonExample, catalog);
@@ -42,31 +43,35 @@ describe('daya permukaan', () => {
     expect(productionW(moon, 100)).toBeCloseTo(dayPowerW(moon), 10);
     expect(productionW(moon, 300)).toBe(0);
   });
-  it('RTG tetap menghasilkan daya di malam hari', () => {
-    const rtg = resolveAssembly({ ...moonExample, moduleIds: [...moonExample.moduleIds, 'rtg'] }, catalog);
+  it('RTG (MMRTG) tetap menghasilkan daya di malam hari', () => {
+    const rtg = resolveAssembly({ ...moonExample, moduleIds: [...moonExample.moduleIds, 'mmrtg'] }, catalog);
     expect(productionW(rtg, 300)).toBe(rtgPowerW(rtg));
-    expect(rtgPowerW(rtg)).toBe(120);
+    expect(rtgPowerW(rtg)).toBe(125);
   });
   it('baterai terkuras malam hari dan terjaga di [0, kapasitas]', () => {
-    expect(stepBatteryWh(1000, 1000, 0, 115, 20)).toBeCloseTo(885, 10);
-    expect(stepBatteryWh(100, 1000, 0, 115, 100)).toBe(0);
-    expect(stepBatteryWh(990, 1000, 1500, 115, 20)).toBe(1000);
+    // beban rakitan Bulan acuan 120 W (Apollo LM 45 + kamera 15 + bor 60); 20 dtk nyata = 1 jam-game
+    expect(stepBatteryWh(1200, 1200, 0, 120, 20)).toBeCloseTo(1080, 10);
+    expect(stepBatteryWh(100, 1200, 0, 120, 100)).toBe(0);
+    expect(stepBatteryWh(1190, 1200, 1700, 120, 20)).toBe(1200);
   });
 });
 
 describe('delta-v dan burn', () => {
   it('Tsiolkovsky dan kasus tepi', () => {
-    expect(tsiolkovskyDv(450, 3673, 1048)).toBeCloseTo(5534, -1);
+    // Bulan acuan: m0 15.327 kg, mf 3.427 kg, RL10C-1 454 s
+    expect(tsiolkovskyDv(454, 15_327, 3427)).toBeCloseTo(454 * G0 * Math.log(15_327 / 3427), 8);
+    expect(tsiolkovskyDv(454, 15_327, 3427)).toBeGreaterThan(5840);
     expect(tsiolkovskyDv(450, 1000, 1000)).toBe(0);
     expect(tsiolkovskyDv(0, 2000, 1000)).toBe(0);
   });
   it('biaya burn transfer dan bahan bakar tersisa', () => {
-    expect(transferBurnCostMs(5000, 0)).toBeCloseTo(3500, 10);
-    expect(transferBurnCostMs(5000, 1)).toBeCloseTo(5250, 10);
-    const left = fuelRemainingKg(3673, 1048, 3500, 450);
+    expect(transferBurnCostMs(5840, 0)).toBeCloseTo(0.7 * 5840, 10);
+    expect(transferBurnCostMs(5840, 1)).toBeCloseTo(0.7 * 5840 * 1.5, 10);
+    const left = fuelRemainingKg(15_327, 3427, 0.7 * 5840, 454);
     expect(left).toBeGreaterThan(0);
-    expect(left).toBeLessThan(2625);
-    expect(fuelRemainingKg(3673, 1048, 99999, 450)).toBe(0);
+    expect(left).toBeLessThan(11_900);
+    expect(left).toBeCloseTo(15_327 * Math.exp(-(0.7 * 5840) / (454 * G0)) - 3427, 6);
+    expect(fuelRemainingKg(15_327, 3427, 99_999, 454)).toBe(0);
   });
 });
 

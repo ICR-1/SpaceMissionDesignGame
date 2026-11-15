@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createNoise3D, fbm3 } from '../../src/gen/noise';
-import { PLANET_KEYS, paintSphere, planetTexture, ringTextureData, type TextureData } from '../../src/gen/planetTextures';
+import { PLANET_KEYS, detailNoiseData, paintSphere, planetTexture, ringTextureData, type TextureData } from '../../src/gen/planetTextures';
 
 const px = (t: TextureData, i: number): [number, number, number, number] => [t.data[i * 4], t.data[i * 4 + 1], t.data[i * 4 + 2], t.data[i * 4 + 3]];
 const mean = (t: TextureData): [number, number, number] => {
@@ -79,5 +79,23 @@ describe('tekstur planet prosedural (tanpa berkas gambar)', () => {
     const alphaAt = (t: number): number => r.data[Math.floor(t * 511) * 4 + 3];
     expect(alphaAt(0.53)).toBeLessThan(30);
     expect(alphaAt(0.3)).toBeGreaterThan(150);
+  });
+});
+
+describe('derau detail halus (lapisan detail Bumi)', () => {
+  it('deterministik, bervariasi, rata-rata mendekati tengah, dan menyambung mulus saat diulang', () => {
+    const a = detailNoiseData(64), b = detailNoiseData(64);
+    expect(Buffer.from(a.data).equals(Buffer.from(b.data))).toBe(true);
+    let sum = 0, min = 255, max = 0;
+    for (let i = 0; i < a.data.length; i += 4) { sum += a.data[i]; min = Math.min(min, a.data[i]); max = Math.max(max, a.data[i]); }
+    const mean = sum / (a.data.length / 4);
+    expect(mean).toBeGreaterThan(100);
+    expect(mean).toBeLessThan(155);
+    expect(max - min).toBeGreaterThan(60);
+    // Tepi kiri/kanan dan atas/bawah harus berdekatan (selisih piksel bertetangga di dalam gambar sama kecilnya).
+    const px = (x: number, y: number): number => a.data[(y * 64 + x) * 4];
+    let seam = 0, inner = 0;
+    for (let i = 0; i < 64; i++) { seam += Math.abs(px(63, i) - px(0, i)) + Math.abs(px(i, 63) - px(i, 0)); inner += Math.abs(px(31, i) - px(32, i)) + Math.abs(px(i, 31) - px(i, 32)); }
+    expect(seam).toBeLessThan(inner * 2 + 64);
   });
 });

@@ -7,6 +7,7 @@ import { linesFor } from '../rules/dialogs';
 import type { MissionOutcome } from '../rules/missionResult';
 import type { MissionConfig } from '../rules/types';
 import { missionSucceeded, modeRules, nextDestinationId, recordMission, type MissionRecord } from '../rules/progress';
+import { stopTutor } from '../rules/tutor';
 import { preflight } from '../rules/preflight';
 import { suggestChanges, weakestIndicator, type Suggestion } from '../rules/whatIf';
 import { earnedMedals, explainScore, MEDALS, mainCauses, sectionsForCodes } from '../rules/review';
@@ -48,6 +49,12 @@ export class ReviewScene extends BaseScene {
 
   protected onEnter(ui: HTMLElement): void {
     const state = this.ctx.store.get();
+    if (state.tutor.active) {
+      this.ctx.store.set({
+        tutor: stopTutor(),
+        save: !state.save.tutorialSeen ? { ...state.save, tutorialSeen: true } : state.save,
+      });
+    }
     const outcome = state.outcome;
     this.gem.visible = outcome !== null && outcome !== undefined;
     if (!outcome) {

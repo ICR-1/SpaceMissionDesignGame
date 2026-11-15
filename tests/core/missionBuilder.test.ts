@@ -13,10 +13,10 @@ describe('missionBuilder', () => {
     expect(r.go).toBe(true);
   });
   it('setExclusive mengganti lander tanpa menyentuh modul lain', () => {
-    const c = setExclusive(defaultMission('moon'), catalog, ['lander_s', 'lander_m'], 'lander_m');
-    expect(moduleCount(c, 'lander_m')).toBe(1);
-    expect(moduleCount(c, 'lander_s')).toBe(0);
-    expect(moduleCount(c, 'tank_l')).toBe(1);
+    const c = setExclusive(defaultMission('moon'), catalog, ['apollo_lm', 'artemis_hls', 'mars_edl'], 'artemis_hls');
+    expect(moduleCount(c, 'artemis_hls')).toBe(1);
+    expect(moduleCount(c, 'apollo_lm')).toBe(0);
+    expect(moduleCount(c, 'tank_cryo_l')).toBe(1);
   });
   it('setModuleCount menambah dan mengurangi, tidak negatif', () => {
     let c = setModuleCount(defaultMission('moon'), catalog, 'solar_s', 2);
@@ -34,8 +34,8 @@ describe('missionBuilder', () => {
     const base = defaultMission('moon');
     expect(setFuelFraction(base, 5).fuelFraction).toBe(1);
     expect(setFuelFraction(base, -1).fuelFraction).toBe(0);
-    expect(setRocket(base, 'garuda_heavy').rocketId).toBe('garuda_heavy');
-    expect(base.rocketId).toBe('pandu_1');
+    expect(setRocket(base, 'sls_block1').rocketId).toBe('sls_block1');
+    expect(base.rocketId).toBe('falcon_9');
     expect(setDestination(base, 'mars').destinationId).toBe('mars');
     expect(setDestination({ ...base, seed: 9 }, 'mars').seed).toBe(9);
   });

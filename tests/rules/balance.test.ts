@@ -56,40 +56,50 @@ describe.each(['moon', 'mars'])('keseimbangan katalog: %s (PRD 16.10)', (destina
     expect(go.length).toBeLessThan(valid.length);
   });
   it('rakitan termurah tidak otomatis Go', () => {
-    const minCost = Math.min(...valid.map((x) => x.r.metrics.totalCostMusd));
+    // Jangan memakai Math.min(...array): ratusan ribu kombinasi melewati batas argumen mesin JS (RangeError).
+    let minCost = Infinity;
+    for (const x of valid) if (x.r.metrics.totalCostMusd < minCost) minCost = x.r.metrics.totalCostMusd;
     const cheapest = valid.filter((x) => x.r.metrics.totalCostMusd === minCost);
     expect(cheapest.length).toBeGreaterThan(0);
     cheapest.forEach((x) => expect(x.r.go).toBe(false));
   });
 });
 
-describe('Lunar Cruiser (modul rover)', () => {
+describe('NASA Artemis LTV Rover (modul rover)', () => {
   const rover = kind('rover');
-  it('katalog punya tepat satu Lunar Cruiser dengan stat kecepatan dan beban daya', () => {
-    expect(rover.map((m) => m.id)).toEqual(['rover_lc']);
+  it('katalog punya tepat satu NASA Artemis LTV Rover dengan stat kecepatan dan beban daya', () => {
+    expect(rover.map((m) => m.id)).toEqual(['rover_ltv']);
     expect(rover[0].stats.speedMs).toBeGreaterThan(0);
     expect(rover[0].stats.driveW).toBeGreaterThan(0);
   });
-  it('di Bulan ada rakitan Go yang membawa Lunar Cruiser, tetapi tidak semua rakitan membawanya Go', () => {
-    const withRover = allAssemblies('moon').map((c) => ({ ...c, moduleIds: [...c.moduleIds, 'rover_lc'] }));
-    const results = withRover.map((config) => preflight(config, catalog));
-    expect(results.every((r) => r.assemblyErrors.length === 0)).toBe(true);
-    const go = results.filter((r) => r.go).length;
+  it('di Bulan ada rakitan Go yang membawa rover, tetapi tidak semua rakitan membawanya Go', () => {
+    const withRover = allAssemblies('moon').map((c) => ({ ...c, moduleIds: [...c.moduleIds, 'rover_ltv'] }));
+    let go = 0, bad = 0;
+    for (const config of withRover) {
+      const r = preflight(config, catalog);
+      if (r.assemblyErrors.length > 0) bad++;
+      if (r.go) go++;
+    }
+    expect(bad).toBe(0);
     expect(go).toBeGreaterThan(0);
-    expect(go).toBeLessThan(results.length);
+    expect(go).toBeLessThan(withRover.length);
   });
-  it('di Mars ada rakitan Go yang membawa Lunar Cruiser, tetapi tidak semua rakitan membawanya Go', () => {
-    const withRover = allAssemblies('mars').map((c) => ({ ...c, moduleIds: [...c.moduleIds, 'rover_lc'] }));
-    const results = withRover.map((config) => preflight(config, catalog));
-    expect(results.every((r) => r.assemblyErrors.length === 0)).toBe(true);
-    const go = results.filter((r) => r.go).length;
+  it('di Mars ada rakitan Go yang membawa rover, tetapi tidak semua rakitan membawanya Go', () => {
+    const withRover = allAssemblies('mars').map((c) => ({ ...c, moduleIds: [...c.moduleIds, 'rover_ltv'] }));
+    let go = 0, bad = 0;
+    for (const config of withRover) {
+      const r = preflight(config, catalog);
+      if (r.assemblyErrors.length > 0) bad++;
+      if (r.go) go++;
+    }
+    expect(bad).toBe(0);
     expect(go).toBeGreaterThan(0);
-    expect(go).toBeLessThan(results.length);
+    expect(go).toBeLessThan(withRover.length);
   });
-  it('Lunar Cruiser tidak boleh lebih dari satu (di Bulan maupun Mars)', () => {
+  it('rover tidak boleh lebih dari satu (di Bulan maupun Mars)', () => {
     const mars = allAssemblies('mars')[0];
-    expect(preflight({ ...mars, moduleIds: [...mars.moduleIds, 'rover_lc', 'rover_lc'] }, catalog).assemblyErrors).toContain('ROVER_MAX');
+    expect(preflight({ ...mars, moduleIds: [...mars.moduleIds, 'rover_ltv', 'rover_ltv'] }, catalog).assemblyErrors).toContain('ROVER_MAX');
     const m = allAssemblies('moon')[0];
-    expect(preflight({ ...m, moduleIds: [...m.moduleIds, 'rover_lc', 'rover_lc'] }, catalog).assemblyErrors).toContain('ROVER_MAX');
+    expect(preflight({ ...m, moduleIds: [...m.moduleIds, 'rover_ltv', 'rover_ltv'] }, catalog).assemblyErrors).toContain('ROVER_MAX');
   });
 });

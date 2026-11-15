@@ -1,6 +1,6 @@
 import { RELAY_ANTENNA_ID } from '../core/constants';
 import {
-  defaultMission, detectActivePreset, getPresetMission, isRecommendedItem, mainAntennaIds,
+  defaultMission, detectActivePreset, getPresetMission, mainAntennaIds,
   moduleCount, setDestination, setExclusive, setFuelFraction, setModuleCount, setRocket,
   STUDENT_PRESETS, toggleInstrument,
 } from '../core/missionBuilder';
@@ -36,18 +36,14 @@ function section(title: string, key = ''): { root: HTMLElement; body: HTMLElemen
   return { root, body, setSummary: (t) => { summary.textContent = t; } };
 }
 
-function choiceGroup(title: string, items: Item[], onPick: (id: Id) => void, key = '', isRec?: (id: Id) => boolean) {
+function choiceGroup(title: string, items: Item[], onPick: (id: Id) => void, key = '') {
   const { root, body, setSummary } = section(title, key);
   const buttons = new Map<Id, HTMLButtonElement>();
   for (const item of items) {
     const b = el('button', 'choice');
     b.type = 'button';
     b.disabled = item.disabled === true;
-    const nameEl = el('span', 'choice-name', item.label);
-    if (isRec?.(item.id)) {
-      nameEl.appendChild(el('span', 'rec-badge', STUDENT_UI.recommendedBadge));
-    }
-    b.appendChild(nameEl);
+    b.appendChild(el('span', 'choice-name', item.label));
     if (item.sub) b.appendChild(el('span', 'choice-sub', item.sub));
     b.addEventListener('click', () => onPick(item.id));
     body.appendChild(b);
@@ -55,35 +51,20 @@ function choiceGroup(title: string, items: Item[], onPick: (id: Id) => void, key
   }
   return {
     root,
-    sync: (selected: Id | null, checkRec?: (id: Id) => boolean) => {
-      buttons.forEach((b, id) => {
-        b.classList.toggle('sel', id === selected);
-        const nameEl = b.querySelector('.choice-name');
-        const badge = b.querySelector('.rec-badge');
-        const rec = checkRec?.(id) ?? false;
-        if (rec && !badge && nameEl) {
-          nameEl.appendChild(el('span', 'rec-badge', STUDENT_UI.recommendedBadge));
-        } else if (!rec && badge) {
-          badge.remove();
-        }
-      });
+    sync: (selected: Id | null) => {
+      buttons.forEach((b, id) => b.classList.toggle('sel', id === selected));
       setSummary(summarizeSelection(items, selected));
     },
   };
 }
 
-function counterGroup(title: string, items: Item[], onSet: (id: Id, n: number) => void, getCount: (id: Id) => number, key = '', isRec?: (id: Id) => boolean) {
+function counterGroup(title: string, items: Item[], onSet: (id: Id, n: number) => void, getCount: (id: Id) => number, key = '') {
   const { root, body, setSummary } = section(title, key);
   const values = new Map<Id, HTMLElement>();
-  const rows = new Map<Id, HTMLElement>();
   for (const item of items) {
     const row = el('div', 'counter');
     const info = el('span', 'counter-info');
-    const nameEl = el('span', 'choice-name', item.label);
-    if (isRec?.(item.id)) {
-      nameEl.appendChild(el('span', 'rec-badge', STUDENT_UI.recommendedBadge));
-    }
-    info.append(nameEl, el('span', 'choice-sub', item.sub ?? ''));
+    info.append(el('span', 'choice-name', item.label), el('span', 'choice-sub', item.sub ?? ''));
     const minus = el('button', 'step', '−');
     const plus = el('button', 'step', '+');
     const value = el('span', 'counter-value', '0');
@@ -93,28 +74,20 @@ function counterGroup(title: string, items: Item[], onSet: (id: Id, n: number) =
     row.append(info, minus, value, plus);
     body.appendChild(row);
     values.set(item.id, value);
-    rows.set(item.id, row);
   }
   return {
     root,
-    sync: (checkRec?: (id: Id) => boolean) => {
+    sync: () => {
       values.forEach((v, id) => { v.textContent = String(getCount(id)); });
-      rows.forEach((row, id) => {
-        const nameEl = row.querySelector('.choice-name');
-        const badge = row.querySelector('.rec-badge');
-        const rec = checkRec?.(id) ?? false;
-        if (rec && !badge && nameEl) {
-          nameEl.appendChild(el('span', 'rec-badge', STUDENT_UI.recommendedBadge));
-        } else if (!rec && badge) {
-          badge.remove();
-        }
-      });
       setSummary(summarizeCounts(items, getCount));
     },
   };
 }
 
-const info = (m: Module, extra = ''): string => `${extra}${m.massKg} kg · ${m.costMusd} MUSD`;
+/** Angka bulat dengan pemisah ribuan (roket NASA bermuatan puluhan ribu kg), mis. 16.800. */
+const fmt = (n: number): string => Math.round(n).toLocaleString('id-ID');
+
+const info = (m: Module, extra = ''): string => `${extra}${fmt(m.massKg)} kg · ${m.costMusd} MUSD`;
 
 /** Panel katalog (kiri) dan inspektur preflight (kanan) pada scene Desain. */
 export class DesignPanel {
@@ -219,25 +192,23 @@ export class DesignPanel {
       if (descCruiser && pCruiser) descCruiser.textContent = pCruiser.desc;
     });
 
-    const isRec = (id: Id) => isRecommendedItem(this.config.destinationId, id);
-
     const rocket = choiceGroup(DESIGN.rocket, cat.rockets.map((r) => ({
       id: r.id, label: r.name,
-      sub: `${DESIGN.payload} ${r.payloadToLeoKg} kg · ${r.stages.length} ${DESIGN.stages} · ${r.costMusd} MUSD`,
-    })), (id) => this.handlers.change((c) => setRocket(c, id)), 'rocket', isRec);
-    this.syncs.push(() => rocket.sync(this.config.rocketId, isRec));
+      sub: `${DESIGN.payload} ${fmt(r.payloadToLeoKg)} kg · ${r.stages.length} ${DESIGN.stages} · ${r.costMusd} MUSD`,
+    })), (id) => this.handlers.change((c) => setRocket(c, id)), 'rocket');
+    this.syncs.push(() => rocket.sync(this.config.rocketId));
 
     const exclusive = (title: string, mods: Module[], extra: (m: Module) => string, key: string) => {
       const ids = mods.map((m) => m.id);
       const g = choiceGroup(title, mods.map((m) => ({ id: m.id, label: m.name, sub: info(m, extra(m)) })),
-        (id) => this.handlers.change((c) => setExclusive(c, cat, ids, id)), key, isRec);
-      this.syncs.push(() => g.sync(ids.find((id) => moduleCount(this.config, id) > 0) ?? null, isRec));
+        (id) => this.handlers.change((c) => setExclusive(c, cat, ids, id)), key);
+      this.syncs.push(() => g.sync(ids.find((id) => moduleCount(this.config, id) > 0) ?? null));
       return g.root;
     };
-    const counter = (title: string, mods: Module[], key: string) => {
-      const g = counterGroup(title, mods.map((m) => ({ id: m.id, label: m.name, sub: info(m) })),
-        (id, n) => this.handlers.change((c) => setModuleCount(c, cat, id, n)), (id) => moduleCount(this.config, id), key, isRec);
-      this.syncs.push(() => g.sync(isRec));
+    const counter = (title: string, mods: Module[], key: string, extra?: (m: Module) => string) => {
+      const g = counterGroup(title, mods.map((m) => ({ id: m.id, label: m.name, sub: info(m, extra?.(m) ?? '') })),
+        (id, n) => this.handlers.change((c) => setModuleCount(c, cat, id, n)), (id) => moduleCount(this.config, id), key);
+      this.syncs.push(() => g.sync());
       return g.root;
     };
 
@@ -246,8 +217,8 @@ export class DesignPanel {
 
     const instruments = counterGroup(DESIGN.instruments, cat.instruments.map((i) => ({
       id: i.id, label: i.name, sub: `${i.massKg} kg · ${i.powerW} W · ${i.costMusd} MUSD`,
-    })), (id) => this.handlers.change((c) => toggleInstrument(c, cat, id)), (id) => (this.config.instrumentIds.includes(id) ? 1 : 0), 'instruments', isRec);
-    this.syncs.push(() => instruments.sync(isRec));
+    })), (id) => this.handlers.change((c) => toggleInstrument(c, cat, id)), (id) => (this.config.instrumentIds.includes(id) ? 1 : 0), 'instruments');
+    this.syncs.push(() => instruments.sync());
 
     const fuelSection = section(DESIGN.fuel, 'fuel');
     fuelSection.body.classList.add('fuel-body');
@@ -269,8 +240,8 @@ export class DesignPanel {
       presetsBox,
       el('div', 'panel-category-header', STUDENT_UI.categoryCore),
       rocket.root,
-      exclusive(DESIGN.lander, this.kind('lander'), (m) => `slot ${m.stats.instrumentSlots} · `, 'lander'),
-      exclusive(DESIGN.engine, this.kind('engine'), (m) => `Isp ${m.stats.ispS} s · `, 'engine'),
+      exclusive(DESIGN.lander, this.kind('lander'), (m) => `slot ${m.stats.instrumentSlots} · beban ${m.stats.baseLoadW} W · `, 'lander'),
+      exclusive(DESIGN.engine, this.kind('engine'), (m) => `Isp ${m.stats.ispS} s · ${m.stats.thrustKn} kN · `, 'engine'),
       counter(DESIGN.tanks, this.kind('tank'), 'tanks'),
       counter(DESIGN.solar, this.kind('solar'), 'solar'),
       counter(DESIGN.battery, this.kind('battery'), 'battery'),
@@ -278,9 +249,9 @@ export class DesignPanel {
       instruments.root,
       fuelSection.root,
       el('div', 'panel-category-header', STUDENT_UI.categoryOptional),
-      counter(DESIGN.rtg, this.kind('rtg'), 'rtg'),
+      counter(DESIGN.rtg, this.kind('rtg'), 'rtg', (m) => `${m.stats.powerW} W siang-malam · `),
       counter(DESIGN.relay, relay, 'relay'),
-      counter(DESIGN.rover, this.kind('rover'), 'rover'),
+      counter(DESIGN.rover, this.kind('rover'), 'rover', (m) => `${m.stats.speedMs} m/s · ${m.stats.driveW} W saat jalan · `),
     );
     return root;
   }
@@ -326,18 +297,20 @@ export class DesignPanel {
     this.launch.textContent = result.go ? DESIGN.launch : DESIGN.launchBlocked;
 
     const m = result.metrics;
+    const dest = this.catalog.destinations.find((d) => d.id === config.destinationId);
+    const base = this.catalog.rockets.find((r) => r.id === config.rocketId);
     clear(this.metrics);
     const metric = (k: string, v: string, term: GlossaryKey) => {
       const kEl = el('span', 'metric-k', k);
       attachTooltip(kEl, term);
       this.metrics.append(kEl, el('span', 'metric-v', v));
     };
-    metric(DESIGN.metrics.dry, `${m.dryMassKg.toFixed(0)} kg`, 'dryMass');
-    metric(DESIGN.metrics.m0, `${m.m0Kg.toFixed(0)} kg`, 'm0');
-    metric(DESIGN.metrics.dv, `${m.dvAvailableMs.toFixed(0)} / ${m.dvRequiredMs.toFixed(0)} m/s`, 'deltaV');
-    metric(DESIGN.metrics.cost, `${m.totalCostMusd.toFixed(0)} MUSD`, 'budget');
+    // Massa awal dan biaya ditampilkan terhadap batasnya (muatan roket dan budget misi) seperti Δv terhadap kebutuhan.
+    metric(DESIGN.metrics.dry, `${fmt(m.dryMassKg)} kg`, 'dryMass');
+    metric(DESIGN.metrics.m0, base ? `${fmt(m.m0Kg)} / ${fmt(base.payloadToLeoKg)} kg` : `${fmt(m.m0Kg)} kg`, 'm0');
+    metric(DESIGN.metrics.dv, `${fmt(m.dvAvailableMs)} / ${fmt(m.dvRequiredMs)} m/s`, 'deltaV');
+    metric(DESIGN.metrics.cost, dest ? `${fmt(m.totalCostMusd)} / ${fmt(dest.budgetMusd)} MUSD` : `${fmt(m.totalCostMusd)} MUSD`, 'budget');
 
-    const dest = this.catalog.destinations.find((d) => d.id === config.destinationId);
     clear(this.objectives);
     for (const o of dest?.objectives.filter((x) => x.required) ?? []) {
       const ok = !result.missingObjectives.includes(o.id);
@@ -346,7 +319,6 @@ export class DesignPanel {
       this.objectives.appendChild(li);
     }
 
-    const base = this.catalog.rockets.find((r) => r.id === config.rocketId);
     const rocket = base ? paceRocket(base) : undefined;
     clear(this.stageList);
     rocket?.stages.forEach((s, i) => {
@@ -363,7 +335,6 @@ export class DesignPanel {
       this.nova.appendChild(el('p', 'nova-ok', 'Semua indikator aman. Siap diluncurkan, Arka!'));
     } else {
       warnings.forEach((w) => this.nova.appendChild(el('p', 'nova-warn', w)));
-      this.nova.appendChild(el('div', 'nova-student-tip', `${STUDENT_UI.studentTipTitle} ${STUDENT_UI.studentTipHelp}`));
     }
   }
 }

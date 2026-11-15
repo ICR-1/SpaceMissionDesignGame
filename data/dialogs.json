@@ -1,7 +1,7 @@
 [
   { "id": "intro_1", "speaker": "ground", "text": "Tahun 2061. Badai Matahari raksasa bernama Kappa Event melumpuhkan satelit dan memutus jaringan komunikasi antarplanet." },
   { "id": "intro_2", "speaker": "ground", "text": "Arsip data kehilangan peta navigasi tata surya. Tersisa satu petunjuk: sinyal lemah dari Beacon, kapsul waktu yang ditinggalkan probe-probe generasi lama." },
-  { "id": "intro_3", "speaker": "sekar", "text": "Aku Dr. Sekar Wulandari, Mission Director Badan Antariksa Khatulistiwa. Badan kita kecil dan kekurangan dana, tapi penuh tekad. Selamat datang, Arka." },
+  { "id": "intro_3", "speaker": "sekar", "text": "Aku Dr. Bil Mark Hawking, Mission Director Badan Antariksa Khatulistiwa. Badan kita kecil dan kekurangan dana, tapi penuh tekad. Selamat datang, Arka." },
   { "id": "intro_4", "speaker": "nova", "text": "Aku NOVA, AI co-pilotmu. Aku akan memberi telemetri, aba-aba pelepasan tahap, dan sedikit humor. Memulihkan semua Beacon berarti membangun kembali jaringan komunikasi tata surya." },
 
   { "id": "briefing_moon_1", "speaker": "sekar", "text": "Beacon pertama ada di Bulan. Misi ini tutorial: ambil sampel regolit di kawah dan foto panorama lokasi pendaratan." },
@@ -10,11 +10,11 @@
   { "id": "briefing_mars_2", "speaker": "sekar", "text": "Panel surya di Mars lebih lemah dan debu mengurangi daya. Hitung daya dan komunikasi dengan cermat." },
 
   { "id": "tutorial_1", "speaker": "nova", "text": "Tips desain: lima indikator di kanan harus tidak merah. Merah berarti tidak boleh diluncurkan." },
-  { "id": "tutorial_2", "speaker": "nova", "text": "Tips penerbangan: tahan W untuk menyalakan mesin dan ikuti panduan pitch. Setiap kali tahap habis, tekan F untuk melepasnya." },
+  { "id": "tutorial_2", "speaker": "nova", "text": "Tips penerbangan: autopilot NASA menerbangkan seluruh misi, dari peluncuran ke orbit, transfer ke tujuan, hingga mendarat. Tugasmu: atur Time Warp (tombol warp atau [H] untuk melompat ke tujuan) dan ambil keputusan saat ada event krisis." },
   { "id": "tutorial_3", "speaker": "nova", "text": "Tips permukaan: awasi oksigen. Wahana adalah markas tempat oksigen dan baterai suit pulih, dan tempat uplink data." },
 
-  { "id": "nova_flight_start", "speaker": "nova", "text": "Semua sistem siap. Tahan W untuk menyalakan mesin." },
-  { "id": "nova_landing", "speaker": "nova", "text": "Mulai pendaratan. Jaga kecepatan vertikal di bawah 5 m/s dan kemiringan di bawah 15 derajat." },
+  { "id": "nova_flight_start", "speaker": "nova", "text": "Seluruh telemetri aktif. Autopilot NASA mengambil alih: mesin menyala otomatis dan roket menuju orbit. Kamu cukup mengawasi dan mengatur Time Warp." },
+  { "id": "nova_landing", "speaker": "nova", "text": "Autopilot memulai pendaratan otomatis. Awasi kecepatan vertikal dan sisa bahan bakar di HUD; simulasi kembali ke 1x agar pendaratan tetap presisi." },
   { "id": "nova_surface_moon", "speaker": "nova", "text": "Pendaratan berhasil. Cari penanda kuning, tekan Q untuk memindai, dan jangan lupa kembali ke wahana." },
   { "id": "nova_surface_mars", "speaker": "nova", "text": "Kita di Mars. Debu bisa mengurangi daya dan cuaca bisa berubah; rencanakan rutemu." },
 

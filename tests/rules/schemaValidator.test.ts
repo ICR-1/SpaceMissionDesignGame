@@ -22,7 +22,8 @@ const issuesOf = (r: Raw): string[] => {
 describe('validateCatalog', () => {
   it('data kanonik valid dan lengkap', () => {
     const c = validateCatalog(raw() as never);
-    expect(c.rockets.map((r) => r.stages.length)).toEqual([2, 3, 4]);
+    expect(c.rockets.map((r) => r.id)).toEqual(['falcon_9', 'atlas_v', 'sls_block1', 'saturn_v']);
+    expect(c.rockets.map((r) => r.stages.length)).toEqual([2, 3, 3, 3]);
     expect(c.destinations.map((d) => d.id)).toEqual(['moon', 'mars']);
     expect(c.events).toHaveLength(9);
   });
@@ -31,10 +32,28 @@ describe('validateCatalog', () => {
     r.rockets[1].payloadToLeoKg = 'banyak';
     expect(issuesOf(r)).toEqual(['rockets[1].payloadToLeoKg: harus berupa angka']);
   });
+  it('spesifikasi fisika tahap roket NASA (massa kering, bahan bakar, dorong, Isp) divalidasi bila ada', () => {
+    const ok = raw();
+    for (const rocket of ok.rockets) {
+      for (const s of rocket.stages as Record<string, unknown>[]) {
+        for (const key of ['dryMassKg', 'fuelKg', 'thrustKn', 'ispSlS', 'ispVacS']) expect(typeof s[key], `${rocket.id}.${key}`).toBe('number');
+      }
+    }
+    const r = raw();
+    r.rockets[0].stages[0].thrustKn = 'besar';
+    expect(issuesOf(r)).toEqual(['rockets[0].stages[0].thrustKn: harus berupa angka']);
+    const r2 = raw();
+    r2.rockets[1].stages[2].ispVacS = 0;
+    expect(issuesOf(r2).join('\n')).toMatch(/rockets\[1\]\.stages\[2\]\.ispVacS/);
+    const r3 = raw();
+    r3.rockets[0].stages[1].fuelKg = -5;
+    expect(issuesOf(r3).join('\n')).toMatch(/rockets\[0\]\.stages\[1\]\.fuelKg/);
+  });
   it('stat wajib per jenis modul', () => {
     const r = raw();
-    delete r.modules.find((m: { id: string }) => m.id === 'eng_eff').stats.ispS;
-    expect(issuesOf(r).join('\n')).toMatch(/modules\[6\]\.stats\.ispS/);
+    delete r.modules.find((m: { id: string }) => m.id === 'eng_rl10').stats.ispS;
+    const index = r.modules.findIndex((m: { id: string }) => m.id === 'eng_rl10');
+    expect(issuesOf(r).join('\n')).toContain(`modules[${index}].stats.ispS`);
   });
   it('id duplikat dan jenis tak dikenal', () => {
     const r = raw();

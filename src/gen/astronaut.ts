@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { VISUAL } from '../core/constants';
+import type { ActionPose } from '../rules/actionScene';
 import { box, jitter, part, boxGeometry } from './mesh';
 import { ico, registerDetailMaterial, seg } from './detail';
 
@@ -35,8 +36,12 @@ export interface AstronautMotion {
   airborne: boolean;
   /** Kecepatan vertikal (m/s, positif naik); menentukan fase naik/turun saat melayang. */
   velY?: number;
-  /** 0-1 kedalaman jongkok: bersiap sebelum lompat dan meredam saat mendarat. */
+  /** 0-1 kedalaman jongkok: bersiap sebelum lompat, meredam saat mendarat, atau berlindung. */
   crouch?: number;
+  /** 0-1 mengangkat tangan melindungi visor dari serpihan/cahaya. */
+  shield?: number;
+  /** Pose aksi khusus adegan sinematik/berlindung. */
+  action?: ActionPose;
   /** 0-1 untuk warna lampu indikator PLSS. */
   oxygen01: number;
 }
@@ -46,6 +51,8 @@ export class AstronautRig {
   private readonly body = new THREE.Group();
   private readonly armL = new THREE.Group();
   private readonly armR = new THREE.Group();
+  private readonly elbowL = new THREE.Group();
+  private readonly elbowR = new THREE.Group();
   private readonly legL = new THREE.Group();
   private readonly legR = new THREE.Group();
   private readonly kneeL = new THREE.Group();
@@ -63,7 +70,7 @@ export class AstronautRig {
   private readonly indicatorMat = new THREE.MeshBasicMaterial({ color: 0x5dff9b });
   private phase = 0;
   private clock = 0;
-  private pose = { swing: 0, lean: 0, spread: 0, armUp: 0, crouch: 0, tuck: 0 };
+  private pose = { swing: 0, lean: 0, spread: 0, armUp: 0, crouch: 0, tuck: 0, shield: 0, inspect: 0, comms: 0 };
 
   /** `lights`: buat SpotLight senter nyata (hanya scene yang membutuhkannya; tiap lampu menambah biaya shader). */
   constructor(lights = false) {
@@ -78,7 +85,7 @@ export class AstronautRig {
     const pack = this.buildBackpack();
     this.indicator = pack;
     for (const side of [-1, 1] as const) {
-      this.buildArm(side === -1 ? this.armL : this.armR, side);
+      this.buildArm(side === -1 ? this.armL : this.armR, side === -1 ? this.elbowL : this.elbowR, side);
       this.buildLeg(side === -1 ? this.legL : this.legR, side === -1 ? this.kneeL : this.kneeR, side === -1 ? this.ankleL : this.ankleR, side);
     }
   }
@@ -155,12 +162,11 @@ export class AstronautRig {
     return lamp;
   }
 
-  private buildArm(pivot: THREE.Group, side: -1 | 1): void {
+  private buildArm(pivot: THREE.Group, elbow: THREE.Group, side: -1 | 1): void {
     pivot.position.set(side * 0.44, 0.62, 0);
     pivot.add(part(new THREE.CylinderGeometry(0.12, 0.105, 0.3, seg(6)), C.cream, [0, -0.15, 0]));
     pivot.add(part(new THREE.CylinderGeometry(0.125, 0.125, 0.05, seg(6)), C.orange, [0, -0.1, 0]));
     pivot.add(part(new THREE.SphereGeometry(0.135, seg(5), seg(4)), C.cream, [0, 0, 0]));
-    const elbow = new THREE.Group();
     elbow.position.y = -0.3;
     elbow.rotation.x = -0.25;
     elbow.add(part(new THREE.CylinderGeometry(0.1, 0.088, 0.28, seg(6)), C.cream, [0, -0.14, 0]));
@@ -194,13 +200,19 @@ export class AstronautRig {
     if (moving && !m.airborne) this.phase += dt * (4.5 + 5.5 * m.speed01);
     const swingAmp = moving && !m.airborne ? (0.38 + (m.run ? 0.3 : 0)) * Math.min(1, m.speed01 * 2) : 0;
     const rising = m.airborne && (m.velY ?? 0) > 0.15;
+    const action = m.airborne ? 'none' : (m.action ?? 'none');
+    const shieldTarget = m.airborne ? 0 : Math.max(m.shield ?? 0, action === 'cover' ? 1 : action === 'brace' ? 0.85 : 0);
+    const crouchFloor = action === 'cover' ? 0.94 : action === 'brace' ? 0.78 : 0;
     const target = {
       swing: Math.sin(this.phase) * swingAmp,
-      lean: m.airborne ? 0.12 : m.run ? 0.3 : moving ? 0.08 : 0,
+      lean: m.airborne ? 0.12 : m.run ? 0.3 : moving ? 0.08 : action === 'inspect' ? 0.18 : 0,
       spread: m.airborne && !rising ? 1 : 0,
       armUp: m.airborne ? 1 : 0,
-      crouch: m.airborne ? 0 : m.crouch ?? 0,
+      crouch: m.airborne ? 0 : Math.max(m.crouch ?? 0, crouchFloor),
       tuck: rising ? 1 : 0,
+      shield: shieldTarget,
+      inspect: action === 'inspect' ? 1 : 0,
+      comms: action === 'comms' ? 1 : 0,
     };
     const k = 1 - Math.exp(-POSE_FOLLOW * dt);
     const p = this.pose;
@@ -210,6 +222,9 @@ export class AstronautRig {
     p.armUp += (target.armUp - p.armUp) * k;
     p.crouch += (target.crouch - p.crouch) * k;
     p.tuck += (target.tuck - p.tuck) * k;
+    p.shield += (target.shield - p.shield) * k;
+    p.inspect += (target.inspect - p.inspect) * k;
+    p.comms += (target.comms - p.comms) * k;
 
     // Jongkok: paha maju, lutut menekuk; pinggul turun agar telapak tetap menapak tanah.
     const thigh = CROUCH_THIGH * p.crouch - 0.55 * p.tuck;
@@ -224,6 +239,7 @@ export class AstronautRig {
     this.antenna.rotation.x = ANTENNA_LEAN + Math.sin(this.phase * 2) * ANTENNA_SWAY * m.speed01;
     this.antenna.rotation.z = Math.sin(this.phase + 1) * ANTENNA_SWAY * 0.5 * m.speed01;
     this.body.rotation.x = p.lean + CROUCH_LEAN * p.crouch;
+    this.body.rotation.y = p.comms * 0.22 * Math.sin(this.clock * 1.4) + p.shield * 0.14 * Math.sin(this.clock * 2.2);
     this.legL.rotation.x = p.swing - 0.4 * p.spread - thigh;
     this.legR.rotation.x = -p.swing + 0.25 * p.spread - thigh;
     this.kneeL.rotation.x = Math.max(0, -p.swing) * 0.9 + 0.5 * p.spread + knee;
@@ -231,10 +247,13 @@ export class AstronautRig {
     const flat = FOOT_FLAT + (1 - FOOT_FLAT) * p.crouch;
     this.ankleL.rotation.x = -(this.legL.rotation.x + this.kneeL.rotation.x) * flat;
     this.ankleR.rotation.x = -(this.legR.rotation.x + this.kneeR.rotation.x) * flat;
-    this.armL.rotation.x = -p.swing * 1.1 - 0.5 * p.armUp + 0.5 * p.crouch;
-    this.armR.rotation.x = p.swing * 1.1 - 0.5 * p.armUp + 0.5 * p.crouch;
-    this.armL.rotation.z = -0.05 - 0.7 * p.armUp;
-    this.armR.rotation.z = 0.05 + 0.7 * p.armUp;
+    const wipe = p.inspect * 0.18 * Math.sin(this.clock * 5.2);
+    this.armL.rotation.x = -p.swing * 1.1 - 0.5 * p.armUp + 0.5 * p.crouch - 1.05 * p.shield;
+    this.armR.rotation.x = p.swing * 1.1 - 0.5 * p.armUp + 0.5 * p.crouch - 1.42 * p.shield - 1.2 * p.inspect - 1.05 * p.comms + wipe;
+    this.armL.rotation.z = -0.05 - 0.7 * p.armUp + 0.35 * p.shield;
+    this.armR.rotation.z = 0.05 + 0.7 * p.armUp - 0.42 * p.shield - 0.35 * p.comms;
+    this.elbowL.rotation.x = -0.25 - 1.25 * p.shield;
+    this.elbowR.rotation.x = -0.25 - 1.45 * p.shield - 0.4 * p.inspect - 1.45 * p.comms + wipe * 0.8;
 
     const blink = m.oxygen01 <= 0.25 && Math.floor(this.clock * 4) % 2 === 0;
     this.indicatorMat.color.set(m.oxygen01 > 0.5 ? 0x5dff9b : m.oxygen01 > 0.25 ? 0xffd24d : 0xff6b6b);

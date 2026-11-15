@@ -71,7 +71,7 @@ const RECIPES: Record<string, () => TextureData> = {
     return paintSphere(512, 256, (x, y, z, _la, _lo, o) => {
       mixInto(o, dark, base, clamp01(0.55 + f3(x * 3.2, y * 3.2, z * 3.2, 5) * 1.1 + f3(x * 12 + 5, y * 12, z * 12, 3) * 0.35));
       const c = f3(x * 16 + 3, y * 16 + 3, z * 16, 2);
-      if (c > 0.28) mixInto(o, o.slice(), [210, 205, 198], smooth(0.28, 0.5, c) * 0.35);
+      if (c > 0.28) mixInto(o, o, [210, 205, 198], smooth(0.28, 0.5, c) * 0.35);
     });
   },
   venus: () => {
@@ -94,9 +94,9 @@ const RECIPES: Record<string, () => TextureData> = {
     return paintSphere(512, 256, (x, y, z, _la, _lo, o) => {
       const n = f3(x * 3, y * 3, z * 3, 5);
       mixInto(o, dark, base, clamp01(0.55 + n * 1.0 + f3(x * 11 + 2, y * 11, z * 11, 3) * 0.3));
-      mixInto(o, o.slice(), mare, smooth(0.15, 0.4, f3(x * 1.3 + 9, y * 1.3, z * 1.3, 3)) * 0.65);
+      mixInto(o, o, mare, smooth(0.15, 0.4, f3(x * 1.3 + 9, y * 1.3, z * 1.3, 3)) * 0.65);
       const c = f3(x * 18 + 3, y * 18 + 3, z * 18, 2);
-      if (c > 0.3) mixInto(o, o.slice(), [226, 228, 232], smooth(0.3, 0.5, c) * 0.4);
+      if (c > 0.3) mixInto(o, o, [226, 228, 232], smooth(0.3, 0.5, c) * 0.4);
     });
   },
   mars: () => {
@@ -104,12 +104,12 @@ const RECIPES: Record<string, () => TextureData> = {
     return paintSphere(512, 256, (x, y, z, lat, _lo, o) => {
       const n = f3(x * 2.1, y * 2.1, z * 2.1, 5);
       mixInto(o, dark, base, smooth(-0.15, 0.22, n));
-      mixInto(o, o.slice(), light, smooth(0.25, 0.5, f3(x * 5 + 9, y * 5, z * 5, 3)) * 0.6);
+      mixInto(o, o, light, smooth(0.25, 0.5, f3(x * 5 + 9, y * 5, z * 5, 3)) * 0.6);
       const f = f3(x * 14, y * 14, z * 14, 2) * 0.12;
       o[0] *= 1 + f;
       o[1] *= 1 + f;
       o[2] *= 1 + f;
-      mixInto(o, o.slice(), hex(0xf1ece6), smooth(1.38 + 0.05 * n, 1.46 + 0.05 * n, Math.abs(lat)));
+      mixInto(o, o, hex(0xf1ece6), smooth(1.38 + 0.05 * n, 1.46 + 0.05 * n, Math.abs(lat)));
     });
   },
   jupiter: () => {
@@ -119,7 +119,7 @@ const RECIPES: Record<string, () => TextureData> = {
       const warp = f3(x * 3, y * 1.2, z * 3, 4) * 1.3;
       ramp(stops, Math.sin(lat * 10.5 + warp) * 0.5 + 0.5 + f3(x * 6, y * 42, z * 6, 3) * 0.16, o);
       const d = Math.hypot((wrapPi(lon - 3.7) * Math.cos(lat)) / 0.3, (lat + 0.42) / 0.15);
-      if (d < 1.15) mixInto(o, o.slice(), red, clamp01(1.1 - d) ** 0.55 * (0.8 + f3(x * 9, y * 14, z * 9, 3) * 0.5));
+      if (d < 1.15) mixInto(o, o, red, clamp01(1.1 - d) ** 0.55 * (0.8 + f3(x * 9, y * 14, z * 9, 3) * 0.5));
     });
   },
   saturn: () => {
@@ -139,8 +139,8 @@ const RECIPES: Record<string, () => TextureData> = {
     return paintSphere(512, 256, (x, y, z, lat, lon, o) => {
       mixInto(o, a, b, (Math.sin(lat * 9 + f3(x * 2.5, y * 1.2, z * 2.5, 4) * 1.4) * 0.5 + 0.5) * 0.85);
       const d = Math.hypot((wrapPi(lon - 1.3) * Math.cos(lat)) / 0.28, (lat + 0.4) / 0.14);
-      if (d < 1) mixInto(o, o.slice(), spot, (1 - d) ** 0.6 * 0.85);
-      mixInto(o, o.slice(), [225, 235, 255], smooth(0.42, 0.62, f3(x * 3 + 9, y * 12, z * 3, 3)) * 0.55);
+      if (d < 1) mixInto(o, o, spot, (1 - d) ** 0.6 * 0.85);
+      mixInto(o, o, [225, 235, 255], smooth(0.42, 0.62, f3(x * 3 + 9, y * 12, z * 3, 3)) * 0.55);
     });
   },
 };
@@ -158,6 +158,40 @@ export function planetTexture(key: PlanetKey): TextureData {
     cache.set(key, t);
   }
   return t;
+}
+
+const lattice = (ix: number, iy: number, period: number, seed: number): number => {
+  let h = (Math.imul((ix % period + period) % period, 374761393) ^ Math.imul((iy % period + period) % period, 668265263) ^ Math.imul(seed, 1274126177)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+};
+
+/**
+ * Derau abu-abu yang menyambung mulus saat diulang (value noise periodik, beberapa oktaf), rata-rata sekitar 0.5.
+ * Dipakai sebagai lapisan detail halus di atas tekstur benda langit yang dilihat dari dekat. Murni dan deterministik.
+ */
+export function detailNoiseData(size = 256): TextureData {
+  const data = new Uint8ClampedArray(size * size * 4);
+  const periods = [8, 16, 32, 64];
+  const weights = [0.4, 0.3, 0.2, 0.1];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let v = 0;
+      for (let o = 0; o < periods.length; o++) {
+        const p = periods[o];
+        const fx = (x / size) * p, fy = (y / size) * p;
+        const ix = Math.floor(fx), iy = Math.floor(fy);
+        const tx = smooth(0, 1, fx - ix), ty = smooth(0, 1, fy - iy);
+        const a = lattice(ix, iy, p, o + 1), b = lattice(ix + 1, iy, p, o + 1);
+        const c = lattice(ix, iy + 1, p, o + 1), d = lattice(ix + 1, iy + 1, p, o + 1);
+        v += weights[o] * ((a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty);
+      }
+      const i = (y * size + x) * 4;
+      data[i] = data[i + 1] = data[i + 2] = v * 255;
+      data[i + 3] = 255;
+    }
+  }
+  return { width: size, height: size, data };
 }
 
 /** Cincin planet: profil 1 dimensi (jari-jari) menjadi warna dan alpha, dengan celah seperti cincin Saturnus. */

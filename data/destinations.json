@@ -1,5 +1,5 @@
 [
-  { "id": "moon", "name": "Bulan", "mvp": true, "gravity": 1.62, "solarIrradianceWm2": 1361, "deltaVKmS": 5.0, "budgetMusd": 400,
+  { "id": "moon", "name": "Bulan", "mvp": true, "gravity": 1.62, "solarIrradianceWm2": 1361, "deltaVKmS": 5.84, "budgetMusd": 485,
     "palette": ["#c9ccd4", "#1b2340", "#ffffff"],
     "objectives": [
       { "id": "moon_regolith", "title": "Ambil sampel regolit di kawah", "required": true, "instrumentId": "sample_drill" },
@@ -9,7 +9,7 @@
     ],
     "eventIds": ["ev_dust_on_panels", "ev_solar_flare", "ev_micrometeorite_rain"],
     "minigameIds": ["photo_panorama", "precise_drill", "weather_connect"] },
-  { "id": "mars", "name": "Mars", "mvp": true, "gravity": 3.71, "solarIrradianceWm2": 590, "deltaVKmS": 6.0, "budgetMusd": 650,
+  { "id": "mars", "name": "Mars", "mvp": true, "gravity": 3.71, "solarIrradianceWm2": 590, "deltaVKmS": 6.20, "budgetMusd": 920,
     "palette": ["#c1440e", "#e8a598", "#7a2e12"],
     "objectives": [
       { "id": "mars_rock", "title": "Analisis batuan", "required": true, "instrumentId": "spectrometer" },

@@ -19,10 +19,12 @@ describe('generator roket modular', () => {
     expect(m.landerSlot.parent).toBe(m.root);
     expect(m.totalHeight).toBeGreaterThan(0);
   });
-  it('lebih banyak tahap memberi roket lebih tinggi (Garuda lebih besar dari Pandu)', () => {
-    const [pandu, , garuda] = catalog.rockets.map(buildRocket);
-    expect(garuda.radius).toBeGreaterThan(pandu.radius);
-    expect(garuda.stageGroups.length).toBeGreaterThan(pandu.stageGroups.length);
+  it('roket muatan besar lebih besar dan bertahap lebih banyak (Saturn V lebih besar dari Falcon 9)', () => {
+    const [falcon, , , saturn] = catalog.rockets.map(buildRocket);
+    expect(catalog.rockets.map((r) => r.id)).toEqual(['falcon_9', 'atlas_v', 'sls_block1', 'saturn_v']);
+    expect(saturn.radius).toBeGreaterThan(falcon.radius);
+    expect(saturn.stageGroups.length).toBeGreaterThan(falcon.stageGroups.length);
+    expect(saturn.totalHeight).toBeGreaterThan(falcon.totalHeight);
   });
   it('cincin batas ikut terlepas bersama tahapnya (tidak tertinggal melayang di root)', () => {
     for (const rocket of catalog.rockets) {
@@ -68,12 +70,12 @@ describe('generator lander', () => {
   });
   it('lebih banyak modul menghasilkan lebih banyak geometri', () => {
     const base = resolveAssembly(defaultMission('moon'), catalog);
-    const more = resolveAssembly({ ...defaultMission('moon'), moduleIds: [...defaultMission('moon').moduleIds, 'solar_s', 'rtg'] }, catalog);
+    const more = resolveAssembly({ ...defaultMission('moon'), moduleIds: [...defaultMission('moon').moduleIds, 'solar_s', 'mmrtg'] }, catalog);
     const count = (g: ReturnType<typeof buildLander>) => { let n = 0; g.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) n += m.geometry.getAttribute('position').count; }); return n; };
     expect(count(buildLander(more.modules, more.instruments))).toBeGreaterThan(count(buildLander(base.modules, base.instruments)));
   });
   it('badan lander digabung: sedikit draw call walau modul dan instrumen penuh', () => {
-    const full = resolveAssembly({ ...defaultMission('mars'), moduleIds: ['lander_m', 'tank_s', 'tank_l', 'eng_eff', 'solar_m', 'solar_m', 'solar_m', 'battery_m', 'battery_m', 'rtg', 'ant_hga', 'relay_link'], instrumentIds: ['cam_pano', 'weather_station', 'seismometer', 'spectrometer', 'sample_drill', 'ice_radar'] }, catalog);
+    const full = resolveAssembly({ ...defaultMission('mars'), moduleIds: ['artemis_hls', 'tank_hyper_s', 'tank_cryo_l', 'eng_rl10', 'solar_m', 'solar_m', 'solar_m', 'battery_m', 'battery_m', 'mmrtg', 'ant_hga', 'relay_link'], instrumentIds: ['cam_pano', 'weather_station', 'seismometer', 'spectrometer', 'sample_drill', 'ice_radar'] }, catalog);
     const l = buildLander(full.modules, full.instruments);
     let meshes = 0;
     l.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes++; });

@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 
-/** Medan partikel ringan (satu THREE.Points, satu draw call) dengan blending aditif. */
+export interface ParticleFieldOptions {
+  blending?: THREE.Blending;
+  fog?: boolean;
+  opacity?: number;
+}
+
+/** Medan partikel ringan (satu THREE.Points, satu draw call). */
 export class ParticleField {
   readonly points: THREE.Points;
   private readonly pos: Float32Array;
@@ -11,7 +17,12 @@ export class ParticleField {
   private readonly life: Float32Array;
   private cursor = 0;
 
-  constructor(private readonly count: number, size: number, soft = false) {
+  constructor(
+    private readonly count: number,
+    size: number,
+    soft = true,
+    options: ParticleFieldOptions = {},
+  ) {
     this.pos = new Float32Array(count * 3).fill(-1e5);
     this.col = new Float32Array(count * 3);
     this.vel = new Float32Array(count * 3);
@@ -23,7 +34,10 @@ export class ParticleField {
     geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
     const mat = new THREE.PointsMaterial({
       size, sizeAttenuation: true, vertexColors: true, transparent: true, depthWrite: false,
-      blending: THREE.AdditiveBlending, fog: false, map: soft ? softPuffTexture() : null,
+      blending: options.blending ?? THREE.AdditiveBlending,
+      fog: options.fog ?? false,
+      opacity: options.opacity ?? 1,
+      map: soft ? softPuffTexture() : null,
     });
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false;
@@ -155,28 +169,30 @@ const FLAME_CORE_HOT_HIGH = new THREE.Color(0xe6f4ff);
 const FLAME_STEP = 1 / 60;
 
 export function setFlame(flame: THREE.Group, throttle01: number, length: number, flicker: number): void {
-  flame.visible = throttle01 > 0.01;
+  const t = Math.min(1, Math.max(0, throttle01));
+  flame.visible = t > 0.005;
   if (!flame.visible) return;
+  const fade = Math.min(1, t / 0.22);
   const [outer, core, glow] = flame.children as [THREE.Mesh, THREE.Mesh, THREE.Sprite];
   flame.userData.time += FLAME_STEP;
   const time = flame.userData.time as number;
-  const s = (0.35 + throttle01 * 0.65) * length * (0.92 + flicker * 0.16);
-  const w = 0.8 + throttle01 * 0.3 + flicker * 0.05;
+  const s = (0.05 + t * 0.95) * fade * length * (0.92 + flicker * 0.16);
+  const w = (0.28 + 0.72 * fade) * (0.8 + t * 0.3 + flicker * 0.05);
   outer.scale.set(w, s, w);
   core.scale.set(w, s * 0.55, w);
   for (const m of [outer, core]) {
     const u = (m.material as THREE.ShaderMaterial).uniforms;
     u.uTime.value = time;
-    u.uThrottle.value = throttle01;
+    u.uThrottle.value = t;
   }
   // Throttle tinggi: api lebih putih-kebiruan dan terang.
   const ou = (outer.material as THREE.ShaderMaterial).uniforms;
-  (ou.uMid.value as THREE.Color).copy(FLAME_OUTER_MID_LOW).lerp(FLAME_OUTER_MID_HIGH, throttle01);
+  (ou.uMid.value as THREE.Color).copy(FLAME_OUTER_MID_LOW).lerp(FLAME_OUTER_MID_HIGH, t);
   const cu = (core.material as THREE.ShaderMaterial).uniforms;
-  (cu.uHot.value as THREE.Color).copy(FLAME_CORE_HOT_LOW).lerp(FLAME_CORE_HOT_HIGH, throttle01);
-  const gs = (glow.userData.base as number) * (0.6 + throttle01 * 0.5) * (0.9 + flicker * 0.2);
+  (cu.uHot.value as THREE.Color).copy(FLAME_CORE_HOT_LOW).lerp(FLAME_CORE_HOT_HIGH, t);
+  const gs = (glow.userData.base as number) * (0.35 + fade * 0.25 + t * 0.5) * (0.9 + flicker * 0.2);
   glow.scale.set(gs, gs, 1);
-  (glow.material as THREE.SpriteMaterial).opacity = 0.35 + throttle01 * 0.45;
+  (glow.material as THREE.SpriteMaterial).opacity = fade * (0.35 + t * 0.45);
 }
 
 export function disposeFlame(flame: THREE.Group): void {
@@ -215,9 +231,10 @@ export function softPuffTexture(): THREE.CanvasTexture {
   c.width = c.height = 64;
   const g = c.getContext('2d');
   if (!g) throw new Error('Canvas 2D tidak tersedia');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 31);
   grad.addColorStop(0, 'rgba(255,255,255,0.95)');
-  grad.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.42)');
+  grad.addColorStop(0.78, 'rgba(255,255,255,0.08)');
   grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);

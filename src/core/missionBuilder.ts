@@ -15,21 +15,21 @@ export const STUDENT_PRESETS: Record<Id, Record<PresetKey, StudentPreset>> = {
   moon: {
     standard: {
       key: 'standard',
-      name: 'Standar Disarankan',
-      desc: 'Pandu-1 + Lander S (Efisien, seimbang, dan hemat anggaran)',
+      name: 'Apollo / Artemis Standar',
+      desc: 'Falcon 9 + Apollo LM (konfigurasi hemat biaya menuju Bulan)',
       config: {
-        destinationId: 'moon', rocketId: 'pandu_1',
-        moduleIds: ['lander_s', 'tank_l', 'eng_eff', 'solar_m', 'battery_m', 'ant_hga'],
-        instrumentIds: ['sample_drill', 'cam_pano'], fuelFraction: 0.75,
+        destinationId: 'moon', rocketId: 'falcon_9',
+        moduleIds: ['apollo_lm', 'tank_cryo_l', 'eng_rl10', 'solar_m', 'battery_m', 'ant_hga'],
+        instrumentIds: ['sample_drill', 'cam_pano'], fuelFraction: 0.85,
       },
     },
     cruiser: {
       key: 'cruiser',
-      name: 'Jelajah (+Rover)',
-      desc: 'Pandu-1 + Lunar Cruiser (Eksplorasi permukaan dengan mobil penjelajah)',
+      name: 'Dengan NASA LTV Rover',
+      desc: 'Atlas V 551 + Apollo LM + Artemis LTV (jelajah permukaan cepat)',
       config: {
-        destinationId: 'moon', rocketId: 'pandu_1',
-        moduleIds: ['lander_s', 'eng_eff', 'tank_s', 'tank_m', 'rtg', 'battery_s', 'ant_hga', 'rover_lc'],
+        destinationId: 'moon', rocketId: 'atlas_v',
+        moduleIds: ['apollo_lm', 'tank_cryo_l', 'eng_rl10', 'solar_m', 'battery_m', 'ant_hga', 'rover_ltv'],
         instrumentIds: ['sample_drill', 'cam_pano'], fuelFraction: 1,
       },
     },
@@ -37,21 +37,21 @@ export const STUDENT_PRESETS: Record<Id, Record<PresetKey, StudentPreset>> = {
   mars: {
     standard: {
       key: 'standard',
-      name: 'Standar Disarankan',
-      desc: 'Rajawali-2 + Lander S (Jangkauan optimal untuk transfer dan pendaratan Mars)',
+      name: 'Mars EDL Standar',
+      desc: 'Atlas V 551 + Mars Sky-Crane Lander (konfigurasi dasar menuju Mars)',
       config: {
-        destinationId: 'mars', rocketId: 'rajawali_2',
-        moduleIds: ['lander_s', 'tank_l', 'eng_eff', 'solar_m', 'battery_m', 'ant_hga'],
+        destinationId: 'mars', rocketId: 'atlas_v',
+        moduleIds: ['mars_edl', 'tank_cryo_l', 'eng_rl10', 'solar_m', 'battery_m', 'ant_hga'],
         instrumentIds: ['spectrometer', 'seismometer'], fuelFraction: 1,
       },
     },
     cruiser: {
       key: 'cruiser',
-      name: 'Jelajah (+Rover)',
-      desc: 'Garuda Heavy + Lunar Cruiser (Wahana berat penjelajah medan pasir Mars)',
+      name: 'SLS + NASA LTV Rover',
+      desc: 'SLS Block 1 + Mars EDL + MMRTG + Rover (misi berat jangka panjang)',
       config: {
-        destinationId: 'mars', rocketId: 'garuda_heavy',
-        moduleIds: ['lander_s', 'tank_l', 'tank_l', 'eng_eff', 'solar_m', 'battery_m', 'ant_hga', 'rover_lc'],
+        destinationId: 'mars', rocketId: 'sls_block1',
+        moduleIds: ['mars_edl', 'tank_cryo_l', 'tank_cryo_m', 'eng_rl10', 'solar_m', 'battery_m', 'mmrtg', 'ant_hga', 'rover_ltv'],
         instrumentIds: ['spectrometer', 'seismometer'], fuelFraction: 1,
       },
     },
@@ -78,8 +78,8 @@ export function getPresetMission(destinationId: Id, key: PresetKey, seed = DEFAU
 
 /** Modul yang sangat disarankan per destinasi untuk membimbing siswa. */
 export const RECOMMENDED_MODULES: Record<Id, Id[]> = {
-  moon: ['pandu_1', 'lander_s', 'eng_eff', 'tank_l', 'solar_m', 'battery_m', 'ant_hga', 'sample_drill', 'cam_pano'],
-  mars: ['rajawali_2', 'lander_s', 'eng_eff', 'tank_l', 'solar_m', 'battery_m', 'ant_hga', 'spectrometer', 'seismometer'],
+  moon: ['falcon_9', 'apollo_lm', 'eng_rl10', 'tank_cryo_l', 'solar_m', 'battery_m', 'ant_hga', 'sample_drill', 'cam_pano'],
+  mars: ['atlas_v', 'mars_edl', 'eng_rl10', 'tank_cryo_l', 'solar_m', 'battery_m', 'ant_hga', 'spectrometer', 'seismometer'],
 };
 
 export function isRecommendedItem(destinationId: Id, id: Id): boolean {

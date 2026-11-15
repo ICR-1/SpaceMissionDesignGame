@@ -99,11 +99,11 @@ describe('CursorManager & Smart Auto Toggle Cursor', () => {
     mgr.dispose();
   });
 
-  it('onSceneChange mengaktifkan mode 3D di flight & surface, serta nonaktif di briefing/design/review', () => {
+  it('onSceneChange hanya mengaktifkan mode 3D pointer-lock di surface; flight & scene UI bebas kursor', () => {
     const mgr = new CursorManager();
 
     mgr.onSceneChange('flight');
-    expect(mgr.isEnabled).toBe(true);
+    expect(mgr.isEnabled).toBe(false);
 
     mgr.onSceneChange('surface');
     expect(mgr.isEnabled).toBe(true);
@@ -120,18 +120,19 @@ describe('CursorManager & Smart Auto Toggle Cursor', () => {
     mgr.dispose();
   });
 
-  it('prepareSceneChange mengunci kursor saat pindah ke scene 3D diminta (masih dalam gestur), bukan ke scene 2D', () => {
+  it('prepareSceneChange hanya mengunci kursor saat pindah ke surface, bukan ke flight atau scene 2D', () => {
     const requestLock = vi.fn();
     const mgr = new CursorManager({ requestPointerLock: requestLock } as unknown as HTMLCanvasElement);
     mgr.prepareSceneChange('review');
     expect(requestLock).not.toHaveBeenCalled();
     expect(mgr.isEnabled).toBe(false);
     mgr.prepareSceneChange('flight');
-    expect(requestLock).toHaveBeenCalledTimes(1);
+    expect(requestLock).not.toHaveBeenCalled();
+    expect(mgr.isEnabled).toBe(false);
     // Predikat scene lama (mis. panel hasil Penerbangan) tidak menghalangi kunci untuk scene Permukaan.
     mgr.setPredicate(() => true);
     mgr.prepareSceneChange('surface');
-    expect(requestLock).toHaveBeenCalledTimes(2);
+    expect(requestLock).toHaveBeenCalledTimes(1);
     mgr.dispose();
   });
 });

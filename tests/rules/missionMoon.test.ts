@@ -6,33 +6,44 @@ import { dayPowerMargin, nightPowerMargin, dayPowerW, loadW } from '../../src/ru
 import { commsMargin } from '../../src/rules/comms';
 import { dvAvailableMs, dvMargin } from '../../src/rules/deltav';
 import { dryMassKg, fuelMassKg, initialMassKg, massMargin } from '../../src/rules/mass';
+import { G0 } from '../../src/core/constants';
 import { catalog, moonExample } from './helpers';
 
 const TOL = 0.005; // toleransi 0,5%
 const near = (actual: number, expected: number) => expect(Math.abs(actual - expected) / expected).toBeLessThanOrEqual(TOL);
 
-describe('contoh hitung misi Bulan (PRD 14)', () => {
+/**
+ * Contoh hitung misi Bulan dengan katalog NASA: Falcon 9 (muatan LEO 16.800 kg) + Apollo LM + Tangki Kriogenik L (14.000 kg, diisi 85%)
+ * + RL10C-1 (454 s) + Array ROSA + Baterai Orion/HLS + HGA Ka-band; instrumen Kamera Panorama dan Bor Sampel.
+ */
+describe('contoh hitung misi Bulan (katalog NASA)', () => {
   const a = resolveAssembly(moonExample, catalog);
+  // Massa kering: 1900 + 1150 + 190 + 42 + 62 + 30 (modul) + 8 + 45 (instrumen)
+  const DRY = 3427;
+  const FUEL = 14000 * 0.85;
 
   it('massa', () => {
-    expect(dryMassKg(a)).toBe(1048);
-    expect(fuelMassKg(a)).toBe(2625);
-    expect(initialMassKg(a)).toBe(3673);
-    near(massMargin(a), 0.082);
+    expect(dryMassKg(a)).toBe(DRY);
+    expect(fuelMassKg(a)).toBe(FUEL);
+    expect(initialMassKg(a)).toBe(DRY + FUEL);
+    near(massMargin(a), (16_800 - (DRY + FUEL)) / 16_800);
   });
-  it('delta-v', () => {
-    near(dvAvailableMs(a), 5534);
-    near(dvMargin(a), 0.107);
+  it('delta-v: Tsiolkovsky dengan Isp 454 s terhadap kebutuhan Bulan 5.840 m/s', () => {
+    const dv = 454 * G0 * Math.log((DRY + FUEL) / DRY);
+    near(dvAvailableMs(a), dv);
+    near(dvMargin(a), (dv - 5840) / 5840);
   });
   it('biaya dan budget', () => {
-    expect(totalCostMusd(a)).toBe(298);
-    near(budgetMargin(a), 0.255);
+    // Falcon 9 67 + Apollo LM 75 + tangki 48 + RL10C 42 + ROSA 15 + baterai 20 + HGA 22 + kamera 15 + bor 55
+    expect(totalCostMusd(a)).toBe(359);
+    expect(a.destination.budgetMusd).toBe(485);
+    near(budgetMargin(a), (485 - 359) / 485);
   });
   it('daya', () => {
-    near(dayPowerW(a), 1524);
-    expect(loadW(a)).toBe(115);
-    near(dayPowerMargin(a), 12.3);
-    near(nightPowerMargin(a), 0.449);
+    near(dayPowerW(a), 4 * 0.3 * 1361);
+    expect(loadW(a)).toBe(45 + 15 + 60);
+    near(dayPowerMargin(a), (4 * 0.3 * 1361 - 120) / 120);
+    near(nightPowerMargin(a), (1200 - 120 * 6) / (120 * 6));
   });
   it('komunikasi', () => {
     near(commsMargin(a), 3.0);
@@ -73,7 +84,7 @@ describe('Go/No-Go', () => {
     expect(r.go).toBe(false);
   });
   it('aturan perakitan dilaporkan', () => {
-    const r = preflight({ ...moonExample, moduleIds: [...moonExample.moduleIds, 'eng_basic', 'relay_link', 'relay_link'] }, catalog);
+    const r = preflight({ ...moonExample, moduleIds: [...moonExample.moduleIds, 'eng_aj10', 'relay_link', 'relay_link'] }, catalog);
     expect(r.assemblyErrors).toEqual(expect.arrayContaining(['ENGINE_COUNT', 'RELAY_MAX']));
     expect(r.go).toBe(false);
   });

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { planetTexture, ringTextureData, type PlanetKey, type TextureData } from './planetTextures';
+import { detailNoiseData, planetTexture, ringTextureData, type PlanetKey, type TextureData } from './planetTextures';
 
 /*
  * Benda langit halus bertekstur prosedural (bukan low-poly): tekstur digambar saat runtime dari noise 3D di kanvas,
@@ -14,21 +14,29 @@ function toCanvasTexture(data: TextureData, srgb = true): THREE.CanvasTexture {
   canvas.height = data.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D tidak tersedia');
-  ctx.putImageData(new ImageData(new Uint8ClampedArray(data.data), data.width, data.height), 0, 0);
+  const pixels = data.data.buffer instanceof ArrayBuffer
+    ? (data.data as Uint8ClampedArray<ArrayBuffer>)
+    : new Uint8ClampedArray(data.data);
+  ctx.putImageData(new ImageData(pixels, data.width, data.height), 0, 0);
   const tex = new THREE.CanvasTexture(canvas);
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
 }
 
-/** Tekstur three.js untuk satu planet (dibuat sekali dan dipakai bersama). */
-export function planetCanvasTexture(key: PlanetKey): THREE.CanvasTexture {
+/** Isi cache tekstur planet dari data piksel siap pakai (mis. hasil Web Worker). */
+export function seedPlanetTexture(key: PlanetKey, data: TextureData): THREE.CanvasTexture {
   let t = textures.get(key);
   if (!t) {
-    t = toCanvasTexture(planetTexture(key));
+    t = toCanvasTexture(data);
     textures.set(key, t);
   }
   return t;
+}
+
+/** Tekstur three.js untuk satu planet (dibuat sekali dan dipakai bersama). */
+export function planetCanvasTexture(key: PlanetKey): THREE.CanvasTexture {
+  return seedPlanetTexture(key, textures.has(key) ? (undefined as unknown as TextureData) : planetTexture(key));
 }
 
 export function hasPlanetTexture(key: PlanetKey): boolean {
@@ -37,10 +45,15 @@ export function hasPlanetTexture(key: PlanetKey): boolean {
 
 let ringTex: THREE.CanvasTexture | null = null;
 
+/** Isi cache tekstur cincin planet dari data piksel siap pakai. */
+export function seedRingTexture(data: TextureData): THREE.CanvasTexture {
+  ringTex ??= toCanvasTexture(data);
+  return ringTex;
+}
+
 /** Tekstur cincin planet (dibuat sekali; dipakai Saturnus dan pemuatan awal). */
 export function ringCanvasTexture(): THREE.CanvasTexture {
-  ringTex ??= toCanvasTexture(ringTextureData());
-  return ringTex;
+  return ringTex ?? seedRingTexture(ringTextureData());
 }
 let glowTex: THREE.CanvasTexture | null = null;
 
@@ -86,6 +99,40 @@ function atmosphereMaterial(color: number, power: number, strength: number): THR
   });
 }
 
+let detailTex: THREE.DataTexture | null = null;
+/** Derau halus yang bisa diulang (bersama untuk semua pemakai); mipmap meratakannya otomatis saat Bumi dilihat dari jauh. */
+function detailTexture(): THREE.DataTexture {
+  if (detailTex) return detailTex;
+  const d = detailNoiseData(256);
+  detailTex = new THREE.DataTexture(new Uint8Array(d.data), d.width, d.height, THREE.RGBAFormat);
+  detailTex.wrapS = detailTex.wrapT = THREE.RepeatWrapping;
+  detailTex.magFilter = THREE.LinearFilter;
+  detailTex.minFilter = THREE.LinearMipmapLinearFilter;
+  detailTex.generateMipmaps = true;
+  detailTex.anisotropy = 4;
+  detailTex.needsUpdate = true;
+  return detailTex;
+}
+
+/**
+ * Tekstur Bumi 1536 px untuk keliling ribuan satuan tampak membesar dan burem dari dekat. Tambahkan dua lapis derau halus
+ * yang diulang (hanya di daratan; laut dikenali dari dominasi biru) sehingga daratan tetap bertekstur tajam di orbit rendah.
+ */
+function addLandDetail(mat: THREE.MeshStandardMaterial): void {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uDetail = { value: detailTexture() };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDetail;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          float land = 1.0 - smoothstep(0.02, 0.1, diffuseColor.b - max(diffuseColor.r, diffuseColor.g));
+          float d1 = texture2D(uDetail, vMapUv * vec2(60.0, 30.0)).r;
+          float d2 = texture2D(uDetail, vMapUv * vec2(230.0, 115.0) + 0.37).r;
+          diffuseColor.rgb *= 1.0 + ((d1 - 0.5) * 0.7 + (d2 - 0.5) * 0.55) * land;
+        }`);
+  };
+}
+
 export interface PlanetOptions {
   segments?: number;
   clouds?: boolean;
@@ -118,6 +165,7 @@ export function createPlanet(key: PlanetKey, radius: number, opts: PlanetOptions
   const geo = new THREE.SphereGeometry(radius, seg, Math.round(seg * 0.66));
   disposables.push(geo);
   const mat = new THREE.MeshStandardMaterial({ map: planetCanvasTexture(key), roughness: 1, metalness: 0 });
+  if (key === 'earth') addLandDetail(mat);
   disposables.push(mat);
   const body = new THREE.Mesh(geo, mat);
   tilt.add(body);

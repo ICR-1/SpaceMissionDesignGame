@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { FIXED_DT, FLIGHT } from '../../src/core/constants';
 import { defaultMission } from '../../src/core/missionBuilder';
 import { resolveAssembly } from '../../src/rules/catalog';
-import { createFlightSimConfig, FlightSim, NO_INPUT } from '../../src/rules/flightSim';
+import { makeAutopilot } from '../../src/rules/autopilot';
+import { createFlightSimConfig, FlightSim } from '../../src/rules/flightSim';
 import {
   accelFactor, createStaging, errorFraction, flightQuality, handlingEff, lateSafetyPenalty, paceRocket,
   stepStaging, type StagingState,
@@ -27,22 +28,31 @@ const close = (xs: number[], ys: number[]) => {
   xs.forEach((x, i) => expect(x).toBeCloseTo(ys[i], 10));
 };
 
-describe('staging: tepat waktu', () => {
-  it('Pandu-1', () => {
-    const { handling, state } = runOnTime('pandu_1');
+describe('staging: tepat waktu (roket NASA)', () => {
+  it('Falcon 9 Block 5 (2 tahap)', () => {
+    const { handling, state } = runOnTime('falcon_9');
     close(handling, [1.2, 1.45, 1.7]);
     expect(state.lateStageCount).toBe(0);
   });
-  it('Rajawali-2', () => close(runOnTime('rajawali_2').handling, [1.0, 1.25, 1.5, 1.75]));
-  it('Garuda Heavy', () => close(runOnTime('garuda_heavy').handling, [0.7, 0.95, 1.2, 1.45, 1.7]));
+  it('Atlas V 551 (3 tahap)', () => close(runOnTime('atlas_v').handling, [1.05, 1.3, 1.55, 1.8]));
+  it('SLS Block 1 (3 tahap)', () => close(runOnTime('sls_block1').handling, [0.8, 1.05, 1.3, 1.55]));
+  it('Saturn V (3 tahap)', () => close(runOnTime('saturn_v').handling, [0.7, 0.95, 1.2, 1.45]));
   it('jumlah F sama dengan jumlah tahap', () => {
-    expect(runOnTime('garuda_heavy').state.jettisoned).toBe(4);
+    expect(runOnTime('falcon_9').state.jettisoned).toBe(2);
+    expect(runOnTime('saturn_v').state.jettisoned).toBe(3);
+  });
+  it('setiap roket katalog: jumlah F sama dengan jumlah tahap dan tidak ada yang terlambat', () => {
+    for (const rocket of catalog.rockets) {
+      const { state } = runOnTime(rocket.id);
+      expect(state.jettisoned, rocket.id).toBe(rocket.stages.length);
+      expect(state.lateStageCount, rocket.id).toBe(0);
+    }
   });
 });
 
 describe('staging: keterlambatan', () => {
-  const rajawali = () => createStaging([25, 30, 40]);
-  const depleted = () => stepStaging(rajawali(), 25, 1, false).state;
+  const threeStage = () => createStaging([25, 30, 40]);
+  const depleted = () => stepStaging(threeStage(), 25, 1, false).state;
 
   it('F tepat 3,0 dtk setelah habis tidak terlambat', () => {
     let s = stepStaging(depleted(), 3, 0, false).state;
@@ -110,21 +120,21 @@ describe('pacing tahap peluncuran', () => {
     }
   });
   it('tidak mengubah data katalog asli (PRD) dan resolveAssembly memakai angka ber-pacing', () => {
-    const raw = catalog.rockets.find((r) => r.id === 'pandu_1')!;
-    expect(raw.stages[0].burnSec).toBe(30);
+    const raw = catalog.rockets.find((r) => r.id === 'falcon_9')!;
+    expect(raw.stages[0].burnSec).toBe(162);
     const a = resolveAssembly(defaultMission('moon'), catalog);
-    expect(a.rocket.stages[0].burnSec).toBe(30 * FLIGHT.launchBurnScale);
-    expect(a.rocket.stages[1].burnSec).toBe(40);
-    expect(raw.stages[0].burnSec).toBe(30);
+    expect(a.rocket.id).toBe('falcon_9');
+    expect(a.rocket.stages[0].burnSec).toBe(162 * FLIGHT.launchBurnScale);
+    expect(a.rocket.stages[1].burnSec).toBe(397);
+    expect(raw.stages[0].burnSec).toBe(162);
   });
-  it('peluncuran gaya throttle penuh memakan waktu sebanyak total nyala tahap bawah ber-pacing', () => {
+  it('peluncuran sampai orbit memakan waktu misi minimal sebanyak nyala tahap bawah ber-pacing', () => {
     const sim = new FlightSim(createFlightSimConfig(defaultMission('moon'), catalog));
-    let t = 0;
-    while (sim.phase === 'launch' && t < 600) {
-      sim.step({ ...NO_INPUT, throttle: 1, jettison: true }, FIXED_DT);
-      t += FIXED_DT;
-    }
+    const next = makeAutopilot(sim);
+    // Autopilot memakai time warp saat peluncuran, jadi ukur waktu misi (bukan jumlah frame).
+    let guard = 0;
+    while (sim.phase === 'launch' && guard++ < 60 * 1200) sim.step(next(), FIXED_DT);
     expect(sim.phase).toBe('orbit');
-    expect(t).toBeGreaterThan(30 * FLIGHT.launchBurnScale * 0.9);
+    expect(sim.missionTimeSec).toBeGreaterThan(162 * FLIGHT.launchBurnScale * 0.9);
   });
 });

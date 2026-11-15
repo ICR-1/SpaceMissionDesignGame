@@ -1,7 +1,25 @@
 export type Id = string;
 
-export interface Stage { id: Id; name: string; burnSec: number }
-export interface Rocket { id: Id; name: string; payloadToLeoKg: number; costMusd: number; handling: number; stages: Stage[] }
+export interface Stage {
+  id: Id;
+  name: string;
+  burnSec: number;
+  /** Spesifikasi fisika nyata per tahap roket (opsional untuk kompatibilitas skema). */
+  dryMassKg?: number;
+  fuelKg?: number;
+  thrustKn?: number;
+  ispSlS?: number;
+  ispVacS?: number;
+}
+export interface Rocket {
+  id: Id;
+  name: string;
+  payloadToLeoKg: number;
+  costMusd: number;
+  handling: number;
+  visualStyle?: 'falcon9' | 'atlas5' | 'sls' | 'saturn5';
+  stages: Stage[];
+}
 
 export const MODULE_KINDS = ['lander', 'tank', 'engine', 'solar', 'battery', 'rtg', 'antenna', 'rover'] as const;
 export type ModuleKind = (typeof MODULE_KINDS)[number];

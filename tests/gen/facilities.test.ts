@@ -100,7 +100,7 @@ describe('model bangunan', () => {
     pad.dispose();
   });
 
-  it('roket jauh lebih besar daripada bangunan: Pandu-1 (satuan roket) setara sekitar 80 m dan muat lander berskala dunia', () => {
+  it('roket jauh lebih besar daripada bangunan: roket acuan 19 satuan setara sekitar 80 m dan muat lander berskala dunia', () => {
     const realRocketHeightM = 19 / LAUNCH_WORLD_SCALE;
     expect(realRocketHeightM).toBeGreaterThan(70);
     expect(realRocketHeightM).toBeLessThan(95);

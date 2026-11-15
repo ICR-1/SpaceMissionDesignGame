@@ -1,20 +1,53 @@
 [
-  { "id": "pandu_1", "name": "Pandu-1", "payloadToLeoKg": 4000, "costMusd": 80, "handling": 1.2,
+  {
+    "id": "falcon_9",
+    "name": "Falcon 9 Block 5",
+    "payloadToLeoKg": 16800,
+    "costMusd": 67,
+    "handling": 1.2,
+    "visualStyle": "falcon9",
     "stages": [
-      { "id": "pandu_1_s1", "name": "Tahap Bawah", "burnSec": 30 },
-      { "id": "pandu_1_s2", "name": "Fairing + Transfer", "burnSec": 40 }
-    ] },
-  { "id": "rajawali_2", "name": "Rajawali-2", "payloadToLeoKg": 12000, "costMusd": 180, "handling": 1.0,
+      { "id": "f9_s1", "name": "Tahap 1: 9x Merlin 1D", "burnSec": 162, "dryMassKg": 25600, "fuelKg": 395700, "thrustKn": 7607, "ispSlS": 282, "ispVacS": 311 },
+      { "id": "f9_s2", "name": "Tahap 2: Merlin Vac + Fairing", "burnSec": 397, "dryMassKg": 3900, "fuelKg": 92670, "thrustKn": 981, "ispSlS": 290, "ispVacS": 348 }
+    ]
+  },
+  {
+    "id": "atlas_v",
+    "name": "Atlas V 551 (NASA Science)",
+    "payloadToLeoKg": 18850,
+    "costMusd": 110,
+    "handling": 1.05,
+    "visualStyle": "atlas5",
     "stages": [
-      { "id": "rajawali_2_s1", "name": "Tahap Bawah", "burnSec": 25 },
-      { "id": "rajawali_2_s2", "name": "Tahap Atas", "burnSec": 30 },
-      { "id": "rajawali_2_s3", "name": "Fairing + Transfer", "burnSec": 40 }
-    ] },
-  { "id": "garuda_heavy", "name": "Garuda Heavy", "payloadToLeoKg": 28000, "costMusd": 340, "handling": 0.7,
+      { "id": "av_srb", "name": "5x Booster SRB AJ-60A", "burnSec": 94, "dryMassKg": 20000, "fuelKg": 213000, "thrustKn": 12267, "ispSlS": 279, "ispVacS": 300 },
+      { "id": "av_core", "name": "Core RD-180", "burnSec": 158, "dryMassKg": 21054, "fuelKg": 190000, "thrustKn": 3827, "ispSlS": 311, "ispVacS": 338 },
+      { "id": "av_centaur", "name": "Centaur RL10C + Transfer", "burnSec": 450, "dryMassKg": 2247, "fuelKg": 20830, "thrustKn": 204, "ispSlS": 350, "ispVacS": 451 }
+    ]
+  },
+  {
+    "id": "sls_block1",
+    "name": "SLS Block 1 (Artemis)",
+    "payloadToLeoKg": 95000,
+    "costMusd": 420,
+    "handling": 0.8,
+    "visualStyle": "sls",
     "stages": [
-      { "id": "garuda_heavy_s1", "name": "Side Booster", "burnSec": 20 },
-      { "id": "garuda_heavy_s2", "name": "Core Bawah", "burnSec": 25 },
-      { "id": "garuda_heavy_s3", "name": "Tahap Atas", "burnSec": 30 },
-      { "id": "garuda_heavy_s4", "name": "Fairing + Transfer", "burnSec": 40 }
-    ] }
+      { "id": "sls_srb", "name": "2x Booster SRB 5-Segmen", "burnSec": 126, "dryMassKg": 196000, "fuelKg": 1260000, "thrustKn": 39140, "ispSlS": 269, "ispVacS": 295 },
+      { "id": "sls_core", "name": "Core 4x RS-25", "burnSec": 354, "dryMassKg": 85275, "fuelKg": 720000, "thrustKn": 9118, "ispSlS": 366, "ispVacS": 452 },
+      { "id": "sls_icps", "name": "ICPS RL10B-2 + Transfer", "burnSec": 450, "dryMassKg": 3500, "fuelKg": 28000, "thrustKn": 110, "ispSlS": 380, "ispVacS": 462 }
+    ]
+  },
+  {
+    "id": "saturn_v",
+    "name": "Saturn V (Apollo)",
+    "payloadToLeoKg": 140000,
+    "costMusd": 500,
+    "handling": 0.7,
+    "visualStyle": "saturn5",
+    "stages": [
+      { "id": "sv_s1c", "name": "Tahap S-IC (5x F-1)", "burnSec": 168, "dryMassKg": 130000, "fuelKg": 2160000, "thrustKn": 35100, "ispSlS": 263, "ispVacS": 304 },
+      { "id": "sv_s2", "name": "Tahap S-II (5x J-2)", "burnSec": 360, "dryMassKg": 40100, "fuelKg": 456100, "thrustKn": 5141, "ispSlS": 340, "ispVacS": 421 },
+      { "id": "sv_s4b", "name": "Tahap S-IVB (J-2) + Transfer", "burnSec": 475, "dryMassKg": 13500, "fuelKg": 109000, "thrustKn": 1033, "ispSlS": 340, "ispVacS": 421 }
+    ]
+  }
 ]

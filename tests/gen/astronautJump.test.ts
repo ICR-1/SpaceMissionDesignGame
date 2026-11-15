@@ -71,4 +71,21 @@ describe('animasi lompat astronot', () => {
     for (let i = 0; i < 40; i++) rig.update(1 / 60, { speed01: 1, run: true, airborne: false, oxygen01: 1 });
     expect(rig.antennaTip().distanceTo(still)).toBeLessThan(0.5);
   });
+
+  it('pose berlindung (cover), inspect, dan comms menjaga telapak kaki tetap menapak tanah', () => {
+    const rig = new AstronautRig();
+    settle(rig, STILL);
+    const standTop = new THREE.Box3().setFromObject(rig.root).max.y;
+    const standFoot = lowestY(rig);
+
+    settle(rig, { ...STILL, action: 'cover' });
+    const coverBox = new THREE.Box3().setFromObject(rig.root);
+    expect(coverBox.max.y).toBeLessThan(standTop - 0.12);
+    expect(Math.abs(coverBox.min.y - standFoot)).toBeLessThan(0.09);
+
+    for (const action of ['brace', 'inspect', 'comms'] as const) {
+      settle(rig, { ...STILL, action });
+      expect(Math.abs(lowestY(rig) - standFoot)).toBeLessThan(0.09);
+    }
+  });
 });

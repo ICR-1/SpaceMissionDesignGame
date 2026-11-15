@@ -72,11 +72,13 @@ describe('daya wahana, siang dan malam', () => {
   });
   it('malam: panel surya berhenti dan baterai terkuras (P - Cload) / 20 per detik', () => {
     const night: SurfaceState = { ...createSurfaceState(moon), timeSec: 250 };
+    expect(night.vehicleCapacityWh).toBe(1200); // baterai Orion/HLS
     const s = run(night, 20, 'idle', 5).state;
-    expect(1000 - s.vehicleWh).toBeCloseTo((loadW(moon) / 20) * 20, 0);
+    expect(night.vehicleCapacityWh - s.vehicleWh).toBeCloseTo((loadW(moon) / 20) * 20, 0);
   });
   it('baterai kosong saat malam: powerOut, nightPowerOut, uplink terblokir', () => {
-    const tiny = resolveAssembly({ ...defaultMission('moon'), moduleIds: ['lander_s', 'tank_l', 'eng_eff', 'solar_m', 'battery_s', 'ant_hga'] }, catalog);
+    // Baterai Li-Ion Orbit 500 Wh dengan beban 120 W: habis dalam 500 / (120 / 20) = sekitar 83 dtk, masih di dalam malam (240-360 dtk)
+    const tiny = resolveAssembly({ ...defaultMission('moon'), moduleIds: ['apollo_lm', 'tank_cryo_l', 'eng_rl10', 'solar_m', 'battery_s', 'ant_hga'] }, catalog);
     const s0: SurfaceState = { ...createSurfaceState(tiny), timeSec: 241 };
     const { state, events } = run(s0, 90, 'idle', 5, tiny);
     expect(events.some((e) => e.type === 'power_out')).toBe(true);
@@ -106,7 +108,7 @@ describe('sinyal, uplink, dan efek event', () => {
     expect(q).toBeCloseTo(1 - (0.6 * 8) / 400, 10);
     const D = uplinkDataD([{ dataUnits: 20, score01: 1 }, { dataUnits: 40, score01: 1 }]);
     expect(uplinkFactor(D, rateTotal(moon), q)).toBe(1);
-    const weak = resolveAssembly({ ...defaultMission('moon'), moduleIds: ['lander_s', 'tank_l', 'eng_eff', 'solar_m', 'battery_m', 'ant_lga'] }, catalog);
+    const weak = resolveAssembly({ ...defaultMission('moon'), moduleIds: ['apollo_lm', 'tank_cryo_l', 'eng_rl10', 'solar_m', 'battery_m', 'ant_lga'] }, catalog);
     expect(uplinkFactor(D, rateTotal(weak), q)).toBeCloseTo((1 * 30 * q) / 60, 10);
   });
   it('efek event: oksigen, baterai suit, daya wahana (persen), waktu, skor, sinyal 60 dtk', () => {
@@ -134,11 +136,11 @@ describe('sinyal, uplink, dan efek event', () => {
   });
 });
 
-describe('Lunar Cruiser di permukaan', () => {
-  const withRover = resolveAssembly({ ...defaultMission('moon'), moduleIds: [...defaultMission('moon').moduleIds, 'rover_lc'] }, catalog);
+describe('NASA Artemis LTV Rover di permukaan', () => {
+  const withRover = resolveAssembly({ ...defaultMission('moon'), moduleIds: [...defaultMission('moon').moduleIds, 'rover_ltv'] }, catalog);
   const night = (a: typeof moon): SurfaceState => ({ ...createSurfaceState(a), timeSec: 250 });
 
-  it('stat kendaraan terbaca dari modul; tanpa Cruiser kecepatan dan beban 0', () => {
+  it('stat kendaraan terbaca dari modul; tanpa rover kecepatan dan beban 0', () => {
     expect(roverSpeedMs(withRover)).toBe(14);
     expect(roverDriveW(withRover)).toBe(150);
     expect(roverSpeedMs(moon)).toBe(0);

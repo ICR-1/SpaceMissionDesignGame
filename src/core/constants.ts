@@ -90,28 +90,93 @@ export const SCORE = {
   sciencePointsDivisor: 2,
 } as const;
 
-/** Penerbangan arcade (PRD 7 dan 14). */
+/** Konstanta astronomi & fisika orbital 3D nyata (Bumi, Bulan, Mars). */
+export const ORBITAL = {
+  launchLatitudeDeg: 28.57,
+  karmanLineM: 100_000,
+  /** Skala waktu yang tersedia: <= maxPhysicsWarp saat mesin menyala/di atmosfer, hingga maxOrbitWarp di ruang hampa. */
+  warpSteps: [1, 2, 5, 10, 50, 250, 1000, 10_000, 100_000] as const,
+  maxPhysicsWarp: 10,
+  sasSlewRateDegS: 45,
+  defaultCdAreaM2: 7.5,
+  fairingSepAltM: 110_000,
+  earth: {
+    mu: 3.986004418e14,
+    radiusM: 6_371_000,
+    seaLevelDensity: 1.225,
+    scaleHeightM: 8_500,
+    atmoTopM: 140_000,
+    /** Kecepatan sudut rotasi Bumi (rad/dtk): 2pi / 86164. */
+    rotOmegaRadS: 7.2921159e-5,
+    soiRadiusM: 924_000_000,
+    parkOrbitAltM: 200_000,
+    minSafePeriapsisAltM: 140_000,
+  },
+  moon: {
+    mu: 4.9048695e12,
+    radiusM: 1_737_400,
+    rotOmegaRadS: 2.6617e-6,
+    distanceM: 384_400_000,
+    soiRadiusM: 66_100_000,
+    captureOrbitAltM: 100_000,
+    tliDvMs: 3_120,
+    loiDvMs: 850,
+    landingDvMs: 1_870,
+    /** Kecepatan pendekatan awal di dekat SOI / orbit tangkap menuju pendaratan. */
+    approachSpeedMs: 1_634,
+  },
+  mars: {
+    mu: 4.282837e13,
+    radiusM: 3_389_500,
+    seaLevelDensity: 0.020,
+    scaleHeightM: 11_100,
+    atmoTopM: 130_000,
+    rotOmegaRadS: 7.0882e-5,
+    /** Jarak lintasan oposisi / transfer antarplanet efektif (m). */
+    transferDistanceM: 78_340_000_000,
+    soiRadiusM: 577_000_000,
+    captureOrbitAltM: 250_000,
+    tmiDvMs: 3_600,
+    moiDvMs: 1_150,
+    landingDvMs: 1_450,
+    approachSpeedMs: 3_429,
+  },
+} as const;
+
+/** Penerbangan arcade & fisika 3D. */
 export const FLIGHT = {
-  throttleRatePerSec: 0.6,
-  /** Peluncuran dan burn transfer: throttle turun sendiri bila W tidak ditahan (harus ditahan untuk mendorong). */
-  throttleDecayPerSec: 1.5,
+  throttleRatePerSec: 0.75,
+  /** Peluruhan throttle saat melepas W tidak lagi dipakai untuk orbit; throttle menetap (W/S/Z/X). */
+  throttleDecayPerSec: 0,
   /**
-   * Roket jatuh jika thrust di bawah ambang saat sudah lepas landas: kecepatan jatuh (porsi lintasan per detik)
-   * bertambah `accel` per detik; thrust di atas ambang meredam jatuh (`recoverPerSec`) dan memulihkan ketinggian
-   * (`climbPerSec`). Menyentuh tanah saat jatuh = peluncuran gagal.
+   * Roket jatuh jika thrust di bawah ambang saat sudah lepas landas.
    */
   fall: { holdThrottle: 0.5, accel: 0.015, recoverPerSec: 0.15, climbPerSec: 0.06 },
-  precisionFactor: 0.4,
-  rotationRateDegS: 60,
+  precisionFactor: 0.35,
+  rotationRateDegS: 26,
   launchStartPitchDeg: 90,
-  /** Pengali lama menyala tahap 1 sampai n-1 (peluncuran) agar tahap tidak terasa habis terlalu cepat; tahap transfer tidak diubah. */
-  launchBurnScale: 2,
-  pitchUnlockProgress: 0.05,
+  /** Ketinggian kunci sikap di landasan & menara (m): kendali manual/SAS aktif setelah melewati menara. */
+  padLockAltitudeM: 120,
+  /** Pengali lama nyala tahap peluncuran (1 = waktu nyata tahap NASA). */
+  launchBurnScale: 1,
+  pitchUnlockProgress: 0.02,
   maxPitchDeg: 100,
   guideExponent: 1.4,
   orbitAltitudeKm: 200,
   altitudeExponent: 1.5,
-  orbitParkSec: 15,
+  /** Lama orbit parkir (detik waktu simulasi). Autopilot memakai warp 5x, jadi sekitar 12 detik nyata. */
+  orbitParkSec: 60,
+  /** Hitung mundur (detik, 1x) di awal fase transfer sebelum burn TLI/TMI menyala, agar SAS sempat mantap menghadap prograde. */
+  tliCountdownSec: 4,
+  /** Detik pertama fase capture dijalankan pada 1x agar tiba di planet tujuan terasa halus. */
+  captureSettleSec: 4,
+  /** Tangga warp coast: pilih warp terbesar yang masih menyisakan minimal ini detik nyata sampai tiba, sehingga warp turun bertahap. */
+  coastWarpStepRealSec: 0.5,
+  /** Warp di atas `coastWarpSoftMax` (hanya 100.000x) baru dipakai bila sisa perjalanan di warp itu masih >= ini detik nyata (Mars ya, Bulan tidak). */
+  coastWarpTopRealSec: 12,
+  coastWarpSoftMax: 10_000,
+  /** Autopilot menaikkan warp coast satu anak tangga setiap sekian detik nyata (tidak pernah melompat dari 5x ke puncak sekaligus). */
+  coastWarpRampStepSec: 0.45,
   orbitDriftAccel: 14,
   orbitDriftMaxSpeed: 9,
   markerAccel: 12,
@@ -120,17 +185,19 @@ export const FLIGHT = {
   markerRestoring: 0.9,
   angleErrorZeroDeg: 30,
   landing: {
-    startAltitudeM: 2000,
-    startVy: -60,
-    rotationMassRefKg: 2000,
+    startAltitudeM: 12_000,
+    startVy: -45,
+    rotationMassRefKg: 3_500,
     rotationScaleMin: 0.5,
     rotationScaleMax: 1.5,
     maxTiltDeg: 90,
     boostAccel: 2,
-    boostFuelKgPerSec: 1.5,
+    boostFuelKgPerSec: 2.5,
     throttleRatePerSec: 2.0,
     throttleDecayPerSec: 2.5,
     cushionTargetVy: 1.8,
+    /** Di bawah ketinggian ini pendaratan selalu 1x (presisi touchdown); di atasnya boleh physics warp sampai `ORBITAL.maxPhysicsWarp`. */
+    warpMinAltM: 350,
   },
   touchdown: {
     perfectVy: 2,
@@ -354,7 +421,7 @@ export const AUDIO = {
 } as const;
 
 /** Skala visual model roket: radius = akar pangkat tiga (payload / referensi). Bukan data game. */
-export const ROCKET_RADIUS_REF_PAYLOAD_KG = 4000;
+export const ROCKET_RADIUS_REF_PAYLOAD_KG = 16000;
 /** Skala lander di dalam fairing (satuan model lander per satuan roket); lander berskala dunia `VISUAL.landerWorldScale`. */
 export const LANDER_IN_FAIRING_SCALE = 0.6;
 

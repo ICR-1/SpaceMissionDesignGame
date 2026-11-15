@@ -140,7 +140,7 @@ const f3 = (x: number, y: number, z: number, oct: number): number => fbm3(noise,
 const DEEP = hex(0x06265a), SHALLOW = hex(0x2377b4), LAKE = hex(0x3a86bd);
 const GREEN = hex(0x3a8638), FOREST = hex(0x24632c), RAIN = hex(0x14501f), SAVANNA = hex(0x9b9a48);
 const TAIGA = hex(0x2a5330), TUNDRA = hex(0x8c9068), SAND = hex(0xcdb26b), ROCK = hex(0x86745a), SNOW = hex(0xf3f7f9);
-const SEA_ICE = hex(0xe3eef4);
+const SEA_ICE = hex(0xe3eef4), FARM = hex(0x9bb04f);
 
 /** Lukis tekstur Bumi ekuirektangular dari data geografi nyata (x = bujur -180..180, y = lintang 90..-90). */
 export function paintEarth(width: number = EARTH_TEXTURE.width, height: number = EARTH_TEXTURE.height): TextureData {
@@ -179,20 +179,30 @@ export function paintEarth(width: number = EARTH_TEXTURE.width, height: number =
       const wLat = latDeg + 7 * moist, wLon = lonDeg + 10 * relief, wAl = Math.abs(wLat);
       mix(c, GREEN, FOREST, smooth(-0.15, 0.2, moist));
       // Tropis kering (sabana) di sabuk lintang rendah-menengah
-      mix(c, c.slice(), SAVANNA, smooth(5, 14, wAl) * (1 - smooth(22, 33, wAl)) * smooth(-0.1, 0.25, -moist));
-      mix(c, c.slice(), RAIN, regionWeight(RAINFOREST, wLat, wLon) * 0.9);
+      mix(c, c, SAVANNA, smooth(5, 14, wAl) * (1 - smooth(22, 33, wAl)) * smooth(-0.1, 0.25, -moist));
+      mix(c, c, RAIN, regionWeight(RAINFOREST, wLat, wLon) * 0.9);
       // Hutan boreal (taiga) lalu tundra ke arah kutub
-      mix(c, c.slice(), TAIGA, smooth(48, 56, wAl) * (1 - smooth(64, 70, wAl)));
-      mix(c, c.slice(), TUNDRA, smooth(62, 71, wAl));
+      mix(c, c, TAIGA, smooth(48, 56, wAl) * (1 - smooth(64, 70, wAl)));
+      mix(c, c, TUNDRA, smooth(62, 71, wAl));
       // Gurun besar
       const desert = regionWeight(DESERTS, wLat, wLon);
-      mix(c, c.slice(), SAND, desert * (0.55 + 0.4 * smooth(-0.2, 0.3, relief)));
-      mix(c, c.slice(), ROCK, desert * smooth(0.25, 0.55, relief) * 0.6);
+      mix(c, c, SAND, desert * (0.55 + 0.4 * smooth(-0.2, 0.3, relief)));
+      mix(c, c, ROCK, desert * smooth(0.25, 0.55, relief) * 0.6);
       // Pegunungan dan batuan terbuka
-      mix(c, c.slice(), ROCK, smooth(0.28, 0.5, relief) * 0.45);
+      mix(c, c, ROCK, smooth(0.28, 0.5, relief) * 0.45);
+      // Detail menengah-halus agar daratan tidak polos dan tidak tampak burem saat dilihat dari dekat (tahap 2 penerbangan):
+      // petak ladang di lintang sedang, punggungan batuan, dan variasi terang-gelap berfrekuensi tinggi.
+      const patch = f3(px * 22 + 50, sl * 22, pz * 22, 3);
+      const fine = f3(px * 70 + 7, sl * 70, pz * 70, 2);
+      const ridge = f3(px * 36 + 11, sl * 36, pz * 36, 3);
+      const temperate = smooth(18, 28, wAl) * (1 - smooth(50, 58, wAl)) * (1 - desert);
+      mix(c, c, FARM, smooth(0.05, 0.35, patch) * 0.45 * temperate);
+      mix(c, c, ROCK, smooth(0.3, 0.7, ridge) * 0.4 * (1 - regionWeight(RAINFOREST, wLat, wLon)));
+      const shade = 1 + 0.22 * patch + 0.14 * fine;
+      c[0] *= shade; c[1] *= shade; c[2] *= shade;
       // Es: gletser nyata, lapisan es, dan seluruh Antarktika
-      if (m.glaciers[i] === 1 || m.shelves[i] === 1 || latDeg < -62) mix(c, c.slice(), SNOW, 0.9 + 0.1 * noise(px * 8, sl * 8, pz * 8));
-      if (al > 78) mix(c, c.slice(), SNOW, smooth(78, 83, al) * 0.7);
+      if (m.glaciers[i] === 1 || m.shelves[i] === 1 || latDeg < -62) mix(c, c, SNOW, 0.9 + 0.1 * noise(px * 8, sl * 8, pz * 8));
+      if (al > 78) mix(c, c, SNOW, smooth(78, 83, al) * 0.7);
       data[i * 4] = c[0]; data[i * 4 + 1] = c[1]; data[i * 4 + 2] = c[2];
       data[i * 4 + 3] = 255;
     }

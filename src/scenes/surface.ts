@@ -21,6 +21,7 @@ import { isHigh } from '../gen/detail';
 import { createTerrain, terrainStyle, type Terrain } from '../gen/terrain';
 import { applyRockTexture, applyTerrainTextures } from '../gen/terrainTexture';
 import { cinematicK, eventSceneFor, planMeteors, type EventSceneSpec } from '../rules/eventScene';
+import { nearCoverRock, planSurfaceAction, stepSprintToCover, type ActionPose, type CoverObstacle, type SurfaceActionPlan } from '../rules/actionScene';
 import { MeteorShower } from '../gen/meteors';
 import { EVENT_SCENE_UI } from '../core/strings';
 import { planSurfaceEvents, rollChoice, type ScheduledEvent } from '../events/eventSystem';
@@ -44,6 +45,7 @@ import { linesFor } from '../rules/dialogs';
 import { showNovaBubble } from '../ui/dialog';
 import { JOURNAL_NOTE, journalFacts } from '../ui/journalFacts';
 import { SurfaceHud, type ObjectiveView } from '../ui/surfaceHud';
+import { TutorGuide } from '../ui/tutorOverlay';
 import { BaseScene } from './baseScene';
 
 const CAM_DISTANCE = 7;
@@ -99,6 +101,7 @@ export class SurfaceScene extends BaseScene {
   private flight: FlightSummary = DEFAULT_FLIGHT;
   private state!: SurfaceState;
   private hud: SurfaceHud | null = null;
+  private tutor: TutorGuide | null = null;
   private terrain: Terrain | null = null;
   private rocks: THREE.InstancedMesh | null = null;
   private hubLander: THREE.Group | null = null;
@@ -153,7 +156,9 @@ export class SurfaceScene extends BaseScene {
   private handledEventIds: Id[] = [];
   private weather: WeatherFx[] = [];
   /** Adegan animasi yang diputar sebelum dialog event; waktu misi dibekukan selama adegan. */
-  private eventScene: { id: string; spec: EventSceneSpec; t: number; sparkAcc: number; open: () => void } | null = null;
+  private eventScene: { id: string; spec: EventSceneSpec; t: number; sparkAcc: number; action: SurfaceActionPlan; arrived: boolean; open: () => void } | null = null;
+  private coverRocks: CoverObstacle[] = [];
+  private manualCover = false;
   private meteors: MeteorShower | null = null;
   private boundaryToastCooldown = 0;
   private dust: ParticleField | null = null;
@@ -289,7 +294,7 @@ export class SurfaceScene extends BaseScene {
     this.handledEventIds = [];
     this.weather = [];
     this.stormK = 0;
-    this.dust = new ParticleField(1400, 0.28);
+    this.dust = new ParticleField(1400, 0.28, true, { blending: THREE.NormalBlending, fog: true, opacity: 0.5 });
     this.scene.add(this.dust.points);
     const ground = new THREE.Color(dest.palette[0]).multiplyScalar(0.62);
     this.puffs = new DustPuffs(VISUAL.puffs.count, VISUAL.puffs.size);
@@ -318,9 +323,17 @@ export class SurfaceScene extends BaseScene {
     this.journalOpen = false;
     const nova = linesFor(this.ctx.catalog.dialogs, `nova_surface_${dest.id}`)[0];
     if (nova) showNovaBubble(ui, nova.text);
-    this.ctx.cursor.setPredicate(() => this.minigame !== null || (this.hud?.dialogOpen ?? false) || this.ended || this.journalOpen);
+    this.tutor = new TutorGuide(ui, this.ctx.store, 'surface', {
+      onVisibilityChange: (vis) => {
+        if (vis) this.ctx.cursor.unlock();
+        else if (this.minigame === null && !(this.hud?.dialogOpen ?? false) && !this.ended && !this.journalOpen) {
+          this.ctx.cursor.lock();
+        }
+      },
+    });
+    this.ctx.cursor.setPredicate(() => this.minigame !== null || (this.hud?.dialogOpen ?? false) || this.ended || this.journalOpen || (this.tutor?.isVisible() ?? false));
     this.ctx.canvas.addEventListener('click', this.lockHandler);
-    this.ctx.cursor.lock();
+    if (!this.tutor.isVisible()) this.ctx.cursor.lock();
     if (this.cruiser) this.hud.toast(SURFACE_UI.messages.roverReady);
     this.syncVisuals(0);
   }
@@ -356,6 +369,8 @@ export class SurfaceScene extends BaseScene {
   }
 
   protected override onExit(): void {
+    this.tutor?.dispose();
+    this.tutor = null;
     this.ctx.canvas.removeEventListener('click', this.lockHandler);
     this.ctx.cursor.setPredicate(null);
     this.ctx.cursor.unlock();
@@ -503,6 +518,7 @@ export class SurfaceScene extends BaseScene {
     const speed = running ? SURFACE.runSpeed : SURFACE.walkSpeed;
     this.speed01 = moving ? speed / SURFACE.runSpeed : 0;
     if (moving) {
+      if (running) this.manualCover = false;
       dir.normalize();
       const moved = clampToDisc(this.pos.x + dir.x * speed * dt, this.pos.z + dir.z * speed * dt, SURFACE.boundaryM);
       this.pos.x = moved.x;
@@ -513,7 +529,10 @@ export class SurfaceScene extends BaseScene {
     this.collideWalker();
     // Lompat: tinggi = v^2 / (2 g) dengan gravitasi destinasi (PRD 14).
     const g = this.assembly.destination.gravity;
-    if (this.onGround && this.jumpWindup <= 0 && this.landRecover <= 0 && input.isDown('Space')) this.jumpWindup = SURFACE.jumpWindupSec;
+    if (this.onGround && this.jumpWindup <= 0 && this.landRecover <= 0 && input.isDown('Space')) {
+      this.manualCover = false;
+      this.jumpWindup = SURFACE.jumpWindupSec;
+    }
     if (this.jumpWindup > 0) {
       this.jumpWindup -= dt;
       if (this.jumpWindup <= 0) {
@@ -546,14 +565,22 @@ export class SurfaceScene extends BaseScene {
   /** Penghalang diam: batu (dari matriks instance), wahana, dan probe Beacon. */
   private buildColliders(): void {
     const list: Circle[] = [];
-    if (this.rocks) list.push(...rockColliders(this.rocks));
+    const covers: CoverObstacle[] = [];
+    if (this.rocks) {
+      const rocks = rockColliders(this.rocks);
+      list.push(...rocks);
+      for (const r of rocks) covers.push({ x: r.x, z: r.z, r: r.r, kind: 'rock' });
+    }
     const lander = this.hubLander;
     if (lander) {
+      const hubR = (lander.userData.footRadius as number) * lander.scale.x + COLLISION.landerMarginM;
       list.push({
-        x: lander.position.x, z: lander.position.z, r: (lander.userData.footRadius as number) * lander.scale.x + COLLISION.landerMarginM,
+        x: lander.position.x, z: lander.position.z, r: hubR,
         top: lander.position.y + (lander.userData.height as number) * lander.scale.x,
       });
+      covers.push({ x: lander.position.x, z: lander.position.z, r: hubR, kind: 'hub' });
     }
+    this.coverRocks = covers;
     if (lander) {
       const ladder = lander.userData.ladder as LadderSpec | undefined;
       if (ladder) {
@@ -763,7 +790,13 @@ export class SurfaceScene extends BaseScene {
         action = () => this.askUplink();
       }
     }
-    if (input.consumePressed('KeyR')) this.toggleDrive();
+    if (input.consumePressed('KeyC') && !this.driving && this.onGround) {
+      this.manualCover = !this.manualCover;
+    }
+    if (input.consumePressed('KeyR')) {
+      this.manualCover = false;
+      this.toggleDrive();
+    }
     if (this.cruiser && !prompt) {
       if (this.driving) prompt = P.dismount;
       else if (this.onGround && Math.hypot(this.pos.x - this.cruiserPos.x, this.pos.z - this.cruiserPos.z) <= ROVER.mountRadiusM) prompt = P.mount;
@@ -895,10 +928,15 @@ export class SurfaceScene extends BaseScene {
       },
       (minigameId) => new Promise<number>((done) => this.startEventMinigame(minigameId, done)),
     );
-    this.startEventFx(next.event.id);
     const spec = eventSceneFor(next.event.id);
-    if (!spec) { openDialog(); return; }
-    this.eventScene = { id: next.event.id, spec, t: 0, sparkAcc: 0, open: openDialog };
+    if (!spec) { this.startEventFx(next.event.id); openDialog(); return; }
+    this.manualCover = false;
+    if (this.driving) this.toggleDrive();
+    const forward = new THREE.Vector3(Math.sin(this.camYaw + Math.PI), 0, Math.cos(this.camYaw + Math.PI)).multiplyScalar(EVENT_SCENE.meteors.minDistM * 1.4);
+    const hazard = { x: this.pos.x + forward.x, z: this.pos.z + forward.z };
+    const action = planSurfaceAction(spec.kind, { x: this.pos.x, z: this.pos.z }, this.coverRocks, hazard, this.facing);
+    this.startEventFx(next.event.id, new THREE.Vector3(action.hazardX, this.terrain?.heightAt(action.hazardX, action.hazardZ) ?? this.pos.y, action.hazardZ));
+    this.eventScene = { id: next.event.id, spec, t: 0, sparkAcc: 0, action, arrived: !action.sprint, open: openDialog };
     this.ctx.input.clear();
   }
 
@@ -924,6 +962,25 @@ export class SurfaceScene extends BaseScene {
     const hud = this.hud;
     if (!sc || !hud) return;
     sc.t += dt;
+    if (sc.action.sprint && !sc.arrived && this.terrain) {
+      const step = stepSprintToCover(
+        { x: this.pos.x, z: this.pos.z, yaw: this.facing },
+        { x: sc.action.coverX, z: sc.action.coverZ, peekYaw: sc.action.peekYaw },
+        SURFACE.runSpeed * 1.2,
+        dt,
+      );
+      this.pos.x = step.x;
+      this.pos.z = step.z;
+      this.pos.y = this.terrain.heightAt(this.pos.x, this.pos.z);
+      this.facing += wrapPi(step.yaw - this.facing) * (1 - Math.exp(-TURN_FOLLOW * dt));
+      this.movement = step.speed01 > 0 ? 'run' : 'idle';
+      this.speed01 = step.speed01;
+      sc.arrived = step.arrived;
+    } else {
+      this.facing += wrapPi(sc.action.peekYaw - this.facing) * (1 - Math.exp(-TURN_FOLLOW * dt));
+      this.movement = 'idle';
+      this.speed01 = 0;
+    }
     const E = EVENT_SCENE;
     const lander = this.hubLander;
     if (sc.spec.kind === 'flare' && lander && this.puffs) {
@@ -970,18 +1027,19 @@ export class SurfaceScene extends BaseScene {
     audio.beep(120 + 60 * size);
   }
 
-  private startEventFx(eventId: string): void {
-    const around = new THREE.Vector3(this.pos.x, this.pos.y, this.pos.z);
+  private startEventFx(eventId: string, hazardPos?: THREE.Vector3): void {
+    const around = hazardPos ? hazardPos.clone() : new THREE.Vector3(this.pos.x, this.pos.y, this.pos.z);
     if (eventId === 'ev_dust_storm') {
       this.weather.push({ kind: 'storm', t: 0, dur: EVENTS.fxStormSec, center: around, drift: new THREE.Vector3() });
     } else if (eventId === 'ev_dust_devil') {
-      const start = around.clone().add(new THREE.Vector3(16, 0, -14));
+      const start = around.clone().add(new THREE.Vector3(10, 0, -10));
       this.weather.push({ kind: 'devil', t: 0, dur: EVENTS.fxDevilSec, center: start, drift: new THREE.Vector3(-1.4, 0, 1.0) });
     } else if (eventId === 'ev_micrometeorite_rain' && this.terrain) {
       this.meteors?.dispose();
       const M = EVENT_SCENE.meteors;
-      const forward = new THREE.Vector3(Math.sin(this.camYaw + Math.PI), 0, Math.cos(this.camYaw + Math.PI)).multiplyScalar(M.minDistM * 1.4);
-      const center = around.clone().add(forward);
+      const center = hazardPos
+        ? hazardPos.clone()
+        : around.clone().add(new THREE.Vector3(Math.sin(this.camYaw + Math.PI), 0, Math.cos(this.camYaw + Math.PI)).multiplyScalar(M.minDistM * 1.4));
       const seed = this.ctx.store.get().mission.seed;
       const plan = planMeteors(seed ^ this.nextEvent, M.count, EVENT_SCENE.introSec.ev_micrometeorite_rain * M.windowFrac, M.minDistM, M.maxDistM);
       const terrain = this.terrain;
@@ -1146,16 +1204,29 @@ export class SurfaceScene extends BaseScene {
         this.stepEffects();
       }
     } else this.stepClock = 0.6;
-    astro.update(dt, { speed01: this.speed01, run: this.movement === 'run', airborne: !this.onGround, velY: this.velY, crouch: this.crouchAmount(), oxygen01: this.state.oxygen / SURFACE.meterMax });
+    let actionPose: ActionPose = 'none';
+    if (this.eventScene) {
+      actionPose = this.eventScene.arrived ? this.eventScene.action.pose : 'none';
+    } else if (this.manualCover && !this.driving && this.onGround) {
+      actionPose = nearCoverRock({ x: this.pos.x, z: this.pos.z }, this.coverRocks) ? 'cover' : 'brace';
+    }
+    astro.update(dt, {
+      speed01: this.speed01, run: this.movement === 'run', airborne: !this.onGround, velY: this.velY,
+      crouch: this.crouchAmount(), action: actionPose, oxygen01: this.state.oxygen / SURFACE.meterMax,
+    });
     this.astronaut?.root.updateMatrixWorld(true);
 
-    // Kamera orang ketiga dengan interpolasi halus.
+    // Kamera orang ketiga (atau sudut kamera aksi saat event berlangsung) dengan interpolasi halus.
     this.emitFootDust();
-    const target = new THREE.Vector3(this.pos.x, this.pos.y + CAM_HEIGHT * (1 + (ROVER.camHeightMul - 1) * (this.camScale - 1) / (ROVER.camDistanceMul - 1)), this.pos.z);
-    const offset = new THREE.Vector3(
+    let target = new THREE.Vector3(this.pos.x, this.pos.y + CAM_HEIGHT * (1 + (ROVER.camHeightMul - 1) * (this.camScale - 1) / (ROVER.camDistanceMul - 1)), this.pos.z);
+    let wantPos = target.clone().add(new THREE.Vector3(
       Math.sin(this.camYaw) * Math.cos(this.camPitch), Math.sin(this.camPitch), Math.cos(this.camYaw) * Math.cos(this.camPitch),
-    ).multiplyScalar(CAM_DISTANCE * this.camScale);
-    const wantPos = target.clone().add(offset);
+    ).multiplyScalar(CAM_DISTANCE * this.camScale));
+    if (this.eventScene) {
+      const act = this.eventScene.action;
+      target = new THREE.Vector3(this.pos.x + act.camLookOffset.x, this.pos.y + act.camLookOffset.y, this.pos.z + act.camLookOffset.z);
+      wantPos = new THREE.Vector3(this.pos.x + act.camOffset.x, this.pos.y + act.camOffset.y, this.pos.z + act.camOffset.z);
+    }
     wantPos.y = Math.max(wantPos.y, terrain.heightAt(wantPos.x, wantPos.z) + CAM_MIN_ABOVE_GROUND);
     const k = dt === 0 ? 1 : 1 - Math.exp(-CAM_FOLLOW * dt);
     this.camPos.lerp(wantPos, k);

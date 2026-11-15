@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { LAUNCH_SITE } from '../core/constants';
 import { createRng, rngRange } from '../core/rng';
-import { box, column, hullMaterial, jitter, paint, part } from './mesh';
+import { box, column, hullMaterial, jitter, mergeHullMeshes, paint, part } from './mesh';
 import { createNoise2D, fbm } from './noise';
 import { GROUND_TILE_M, MAP_BOOST, WATER_TILE_M, natureTextures } from './natureTexture';
 import { ico, isHigh, seg } from './detail';
@@ -378,6 +378,45 @@ function buildArm(length: number): { hinge: THREE.Group; inner: THREE.Group } {
   return { hinge, inner };
 }
 
+const TOWER = { halfX: 0.75, halfZ: 1.35, leg: 0.42, brace: 0.16, bay: 4, coreX: 0.9, coreZ: 1.5 } as const;
+
+/** Balok tipis (batang rangka) dari BoxGeometry polos agar jumlah segitiga tetap kecil. */
+function strut(w: number, h: number, d: number, pos: [number, number, number], rot: [number, number, number] = [0, 0, 0]): THREE.Mesh {
+  return part(new THREE.BoxGeometry(w, h, d), PAD.steel, pos, rot);
+}
+
+/**
+ * Menara servis: empat kaki, rangka bersilang di keempat sisi, dan inti padat di tengah tempat lengan umbilikal menempel
+ * (sebelumnya hanya dua tiang dengan palang tipis sehingga lengan tampak melayang di ruang kosong).
+ * Seluruhnya digabung menjadi satu mesh (satu draw call).
+ */
+function buildTower(tx: number, top: number): THREE.Object3D {
+  const g = new THREE.Group();
+  const { halfX, halfZ, leg, brace, bay } = TOWER;
+  g.add(box(3.4, 0.7, 4.6, PAD.concrete, [tx, 0.35, 0]));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(leg, top, leg, PAD.steel, [tx + sx * halfX, top / 2, sz * halfZ]));
+  g.add(box(TOWER.coreX, top, TOWER.coreZ, PAD.building, [tx, top / 2, 0]));
+
+  const bays = Math.max(1, Math.floor(top / bay));
+  const step = top / bays;
+  const diagX = Math.atan2(step, halfZ * 2); // sisi +-x: rangka di bidang YZ
+  const diagZ = Math.atan2(step, halfX * 2); // sisi +-z: rangka di bidang XY
+  const lenX = Math.hypot(step, halfZ * 2);
+  const lenZ = Math.hypot(step, halfX * 2);
+  for (let i = 0; i <= bays; i++) {
+    const y = Math.max(brace / 2, Math.min(top - brace / 2, i * step));
+    for (const sx of [-1, 1]) g.add(strut(brace, brace, halfZ * 2, [tx + sx * halfX, y, 0]));
+    for (const sz of [-1, 1]) g.add(strut(halfX * 2, brace, brace, [tx, y, sz * halfZ]));
+    if (i === bays) break;
+    const mid = (i + 0.5) * step;
+    const flip = i % 2 === 0 ? 1 : -1;
+    for (const sx of [-1, 1]) g.add(strut(brace, brace, lenX, [tx + sx * halfX, mid, 0], [flip * -diagX, 0, 0]));
+    for (const sz of [-1, 1]) g.add(strut(lenZ, brace, brace, [tx, mid, sz * halfZ], [0, 0, flip * diagZ]));
+  }
+  g.add(box(1.9, 0.6, 3.3, PAD.orange, [tx, top + 0.3, 0]));
+  return mergeHullMeshes(g, 'launch-tower') ?? g;
+}
+
 /** Landasan beton, parit api, dan menara servis dengan lengan umbilikal ke badan roket. Bangunan pendukung: `buildFacilityComplex`. */
 export function createLaunchPad(rocketRadius: number, rocketHeight: number): LaunchPad {
   const group = new THREE.Group();
@@ -394,12 +433,7 @@ export function createLaunchPad(rocketRadius: number, rocketHeight: number): Lau
   group.add(column(rocketRadius * 2.2, rocketRadius * 2.2, 0, 0.05, PAD.trench, 12));
   const tx = -(rocketRadius + 3.4);
   const top = rocketHeight * 0.88;
-  for (const z of [-1.2, 1.2]) group.add(box(0.5, top, 0.5, PAD.steel, [tx, top / 2, z]));
-  for (let y = 2; y < top; y += 4) {
-    group.add(box(0.28, 0.28, 2.6, PAD.steel, [tx, y, 0]));
-    group.add(box(0.2, 0.2, 2.9, PAD.steel, [tx, y + 2, 0], [0.75, 0, 0]));
-  }
-  group.add(box(1.2, 0.6, 3, PAD.orange, [tx, top + 0.3, 0]));
+  group.add(buildTower(tx, top));
 
   const armLen = -tx - rocketRadius * 0.97 - 0.3;
   const arms: Arm[] = [];

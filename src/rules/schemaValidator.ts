@@ -102,6 +102,11 @@ export function validateCatalog(raw: Record<keyof Catalog, unknown>): Catalog {
       stageIds.add(id);
       c.str(`${p}.stages[${j}].name`, so.name);
       c.num(`${p}.stages[${j}].burnSec`, so.burnSec, 0.001);
+      if (so.dryMassKg !== undefined) c.num(`${p}.stages[${j}].dryMassKg`, so.dryMassKg, 0);
+      if (so.fuelKg !== undefined) c.num(`${p}.stages[${j}].fuelKg`, so.fuelKg, 0);
+      if (so.thrustKn !== undefined) c.num(`${p}.stages[${j}].thrustKn`, so.thrustKn, 0.001);
+      if (so.ispSlS !== undefined) c.num(`${p}.stages[${j}].ispSlS`, so.ispSlS, 1);
+      if (so.ispVacS !== undefined) c.num(`${p}.stages[${j}].ispVacS`, so.ispVacS, 1);
     });
   });
   c.uniqueIds('rockets', rockets);

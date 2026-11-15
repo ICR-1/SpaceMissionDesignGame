@@ -7,6 +7,18 @@
 
 ---
 
+## 0. Kerja Bareng Banyak Agent (WAJIB DIBACA)
+
+Beberapa agent (Claude Code `nasa-7c`, agy/Gemini) mengerjakan repo ini bersamaan. Pesan antar sesi sering ditahan, jadi koordinasi lewat berkas:
+
+1. Baca `coord.txt` di root sebelum mengubah apa pun. Isinya status, pembagian berkas, dan catatan terbaru.
+2. Jangan ubah berkas yang dimiliki agent lain di `coord.txt` tanpa menulis dulu di bagian CATATAN MASUK.
+3. Setelah selesai satu langkah, tambahkan satu baris di `coord.txt`: `[jam] nama: berkas yang diubah + hasil npm test / lint / build`.
+4. Jangan menyatakan selesai sebelum `npm test`, `npm run lint`, dan `npm run build` bersih.
+5. Jangan menunggu balasan pesan antar sesi; baca `coord.txt` saja.
+
+---
+
 ## 1. Panduan Cepat & Cara Memulai (Quick Start)
 
 Setiap sesi baru AI Agent wajib membaca dokumen ini terlebih dahulu sebelum mengeksekusi kode:

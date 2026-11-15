@@ -2,6 +2,7 @@ import { DEFAULT_SEED, type SceneId } from './constants';
 
 import type { FlightSummary, MissionOutcome, SurfaceSummary } from '../rules/missionResult';
 import { defaultSave, type SaveData } from '../rules/progress';
+import { createTutorState, type TutorState } from '../rules/tutor';
 import type { GameMode, MissionConfig } from '../rules/types';
 
 export type { GameMode, MissionConfig };
@@ -17,6 +18,8 @@ export interface GameState {
   save: SaveData;
   /** Bagian katalog desain yang ditandai setelah review gagal (tombol Perbaiki desain). */
   flaggedSections: string[];
+  /** Status Tur Pengenalan interaktif lintas scene untuk pemain baru. */
+  tutor: TutorState;
 }
 
 type Listener<T> = (state: T, prev: T) => void;
@@ -54,5 +57,6 @@ export function createGameStore(mission?: MissionConfig, save?: SaveData): Store
     outcome: null,
     save: save ?? defaultSave(),
     flaggedSections: [],
+    tutor: createTutorState(false),
   });
 }

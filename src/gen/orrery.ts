@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createRng, rngRange } from '../core/rng';
-import { createPlanet, createSun, ATMOSPHERES, type PlanetObject, type SunObject } from './planets';
+import { createPlanet, createSun, hasPlanetTexture, ATMOSPHERES, type PlanetObject, type SunObject } from './planets';
 import {
   FOCUS_PLANET, MOON_SPEC, orbitalSpeed, orbitPosition, SOLAR_SYSTEM, SUN_RADIUS, type OrreryFocus, type PlanetSpec,
 } from './solarSystemData';
@@ -47,7 +47,7 @@ export class Orrery {
     const rng = createRng(this.seed ^ 0x501a7);
     const order = [...SOLAR_SYSTEM].sort((a, b) => (a.key === 'earth' ? -1 : b.key === 'earth' ? 1 : 0) || (a.key === 'mars' ? -1 : b.key === 'mars' ? 1 : 0));
     for (const spec of order) {
-      await new Promise((r) => setTimeout(r, 0));
+      if (!hasPlanetTexture(spec.key)) await new Promise((r) => setTimeout(r, 0));
       if (this.disposed) return;
       this.addPlanet(spec, rngRange(rng, 0, Math.PI * 2));
       onReady?.(spec.key);

@@ -70,6 +70,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const TYPE_MS = 24;
 const BLIP_EVERY = 3;
 const BUBBLE_MS = 6500;
+let portraitUid = 0;
 
 function svgEl(tag: string, attrs: Record<string, string>): SVGElement {
   const e = document.createElementNS(SVG_NS, tag);
@@ -77,45 +78,129 @@ function svgEl(tag: string, attrs: Record<string, string>): SVGElement {
   return e as SVGElement;
 }
 
-const poly = (points: string, fill: string): SVGElement => svgEl('polygon', { points, fill, stroke: '#0b1020', 'stroke-width': '1' });
+const poly = (points: string, fill: string, stroke = '#0b1020', sw = '1'): SVGElement =>
+  svgEl('polygon', { points, fill, stroke, 'stroke-width': sw });
 
-/** Potret low-poly bergaya vektor untuk tiap pembicara (tanpa gambar eksternal). */
+const path = (d: string, fill: string, stroke = 'none', sw = '1', extra: Record<string, string> = {}): SVGElement =>
+  svgEl('path', { d, fill, stroke, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', ...extra });
+
+function addPortraitBackdrop(svg: SVGElement, glowColor: string, uid: number): void {
+  const gradId = `portrait-bg-${uid}`;
+  const defs = svgEl('defs', {});
+  const grad = svgEl('radialGradient', { id: gradId, cx: '50%', cy: '42%', r: '62%' });
+  grad.append(
+    svgEl('stop', { offset: '0%', 'stop-color': glowColor, 'stop-opacity': '0.28' }),
+    svgEl('stop', { offset: '65%', 'stop-color': '#0f172a', 'stop-opacity': '0.96' }),
+    svgEl('stop', { offset: '100%', 'stop-color': '#070b18', 'stop-opacity': '1' }),
+  );
+  defs.appendChild(grad);
+  svg.append(
+    defs,
+    svgEl('rect', { x: '0', y: '0', width: '80', height: '80', fill: '#080e1f' }),
+    svgEl('rect', { x: '0', y: '0', width: '80', height: '80', fill: `url(#${gradId})` }),
+    svgEl('circle', {
+      cx: '40', cy: '40', r: '33', fill: 'none', stroke: glowColor,
+      'stroke-width': '0.8', 'stroke-dasharray': '3 4', opacity: '0.22',
+    }),
+    path('M6,13 V6 H13 M67,6 H74 V13 M6,67 V74 H13 M67,74 H74 V67', 'none', glowColor, '1.2', { opacity: '0.35' }),
+  );
+}
+
+/** Potret vektor prosedural bertema antariksa untuk tiap pembicara (tanpa gambar eksternal). */
 export function createPortrait(speaker: DialogSpeaker): SVGElement {
+  const uid = ++portraitUid;
   const svg = svgEl('svg', { viewBox: '0 0 80 80', class: `portrait portrait-${speaker}`, width: '72', height: '72' });
-  svg.appendChild(svgEl('rect', { x: '0', y: '0', width: '80', height: '80', fill: '#0d1426' }));
+  const glow = speaker === 'beacon' ? '#c084fc' : speaker === 'sekar' ? '#fb923c' : speaker === 'ground' ? '#60a5fa' : '#38bdf8';
+  addPortraitBackdrop(svg, glow, uid);
+
   switch (speaker) {
     case 'nova':
       svg.append(
-        poly('40,6 68,22 68,58 40,74 12,58 12,22', '#12304a'),
-        poly('40,16 60,28 60,52 40,64 20,52 20,28', '#1d5d8a'),
-        svgEl('circle', { cx: '40', cy: '40', r: '9', fill: '#4fd1ff', class: 'portrait-core' }),
+        poly('27,12 53,12 68,27 68,53 53,68 27,68 12,53 12,27', '#0f2544', '#38bdf8', '1.4'),
+        poly('40,17 59,28 59,52 40,63 21,52 21,28', '#153e5c', '#7dd3fc', '1.1'),
+        path('M40,8 V15 M40,65 V72 M8,40 H15 M65,40 H72', 'none', '#38bdf8', '1.4', { opacity: '0.75' }),
+        svgEl('circle', { cx: '40', cy: '40', r: '12', fill: '#0284c7', 'fill-opacity': '0.45', stroke: '#7dd3fc', 'stroke-width': '1.3', class: 'portrait-core' }),
+        svgEl('circle', { cx: '40', cy: '40', r: '7', fill: '#38bdf8', class: 'portrait-core' }),
+        svgEl('circle', { cx: '40', cy: '40', r: '2.8', fill: '#e0f2fe' }),
       );
       break;
-    case 'sekar':
+
+    case 'sekar': // Dr. Bil Mark Hawking — Mission Director Badan Antariksa Khatulistiwa
       svg.append(
-        poly('14,80 20,58 60,58 66,80', '#b6443c'),
-        poly('30,50 50,50 48,62 32,62', '#d9a07a'),
-        poly('26,30 40,12 54,30 52,50 28,50', '#e0b08a'),
-        poly('24,34 40,8 56,34 50,24 30,24', '#2a1d1a'),
-        poly('33,36 37,36 37,39 33,39', '#2a1d1a'),
-        poly('43,36 47,36 47,39 43,39', '#2a1d1a'),
+        // Jaket Mission Director + kerah kemeja
+        path('M10,80 L15,62 Q19,56 30,55 H50 Q61,56 65,62 L70,80 Z', '#1e293b', '#0f172a', '1'),
+        path('M25,55 L33,80 H17 L15,63 Z', '#273549'),
+        path('M55,55 L47,80 H63 L65,63 Z', '#273549'),
+        path('M33,55 L40,72 L47,55 Z', '#e2e8f0'),
+        path('M38.5,58 H41.5 L42,74 L38,74 Z', '#0f172a'),
+        path('M17,63 L28,57 M63,63 L52,57', 'none', '#fb923c', '2'),
+        poly('53,66 56,67 54.5,69.5 51.5,69.5 50,67', '#facc15', '#b45309', '0.6'),
+        // Leher & bayangan dagu
+        path('M34,47 V58 Q40,61 46,58 V47 Z', '#cfa080'),
+        path('M34,47 Q40,54 46,47 V52 Q40,56 34,52 Z', '#b68464'),
+        // Telinga
+        path('M24,33 Q21,33 21.5,38 Q22,42 25,42 Z', '#d8a888', '#8a5f46', '0.8'),
+        path('M56,33 Q59,33 58.5,38 Q58,42 55,42 Z', '#cfa080', '#8a5f46', '0.8'),
+        // Kepala & kontur pipi
+        path('M25,26 Q25,14 40,14 Q55,14 55,26 L54,39 Q53,48 40,51 Q27,48 26,39 Z', '#e7bc9e', '#8a5f46', '0.9'),
+        path('M46,16 Q54,18 54.5,27 L53.5,39 Q52,47 41,50 Q49,45 50,37 V24 Z', '#d5a383', 'none', '0', { opacity: '0.5' }),
+        // Rambut rapi beruban di pelipis
+        path('M24,31 Q23,14 40,12 Q57,14 56,31 Q54,22 48,20 Q41,22 33,20 Q27,21 24,31 Z', '#2d2a32', '#18181b', '0.8'),
+        path('M28,18 Q38,11 52,17 Q46,18 39,17 Q33,17 28,18 Z', '#475569', 'none', '0', { opacity: '0.65' }),
+        path('M24.5,27 L27,24 V30 Z M55.5,27 L53,24 V30 Z', '#cbd5e1', 'none', '0', { opacity: '0.85' }),
+        // Alis & mata
+        path('M29,29 Q33,27.5 37,29 M43,29 Q47,27.5 51,29', 'none', '#2d2a32', '1.5'),
+        svgEl('circle', { cx: '33.5', cy: '33.5', r: '1.7', fill: '#1e293b' }),
+        svgEl('circle', { cx: '46.5', cy: '33.5', r: '1.7', fill: '#1e293b' }),
+        svgEl('circle', { cx: '33', cy: '33', r: '0.6', fill: '#ffffff' }),
+        svgEl('circle', { cx: '46', cy: '33', r: '0.6', fill: '#ffffff' }),
+        // Kacamata & kilap lensa
+        svgEl('rect', { x: '27.5', y: '30.5', width: '11', height: '6.5', rx: '1.8', fill: '#bae6fd', 'fill-opacity': '0.18', stroke: '#1e293b', 'stroke-width': '1.2' }),
+        svgEl('rect', { x: '41.5', y: '30.5', width: '11', height: '6.5', rx: '1.8', fill: '#bae6fd', 'fill-opacity': '0.18', stroke: '#1e293b', 'stroke-width': '1.2' }),
+        path('M38.5,33 H41.5 M25,32.5 H27.5 M52.5,32.5 H55', 'none', '#1e293b', '1.2'),
+        path('M29.5,32 L32,35.5 M43.5,32 L46,35.5', 'none', '#ffffff', '0.9', { opacity: '0.45' }),
+        // Hidung & senyum tenang
+        path('M40,34 L39,40 L41.5,40.5', 'none', '#b57f61', '1.1'),
+        path('M35.5,44 Q40,46.5 44.5,44', 'none', '#8f5642', '1.3'),
+        // Headset komunikasi tipis
+        svgEl('rect', { x: '20.5', y: '34', width: '3.5', height: '6', rx: '1.5', fill: '#334155', stroke: '#38bdf8', 'stroke-width': '0.8' }),
+        path('M22,39 Q26,45 34,45.5', 'none', '#475569', '1.1'),
+        svgEl('circle', { cx: '34.5', cy: '45.5', r: '1.1', fill: '#38bdf8', class: 'portrait-core' }),
       );
       break;
+
     case 'ground':
       svg.append(
-        poly('18,80 24,56 56,56 62,80', '#3a4a66'),
-        poly('28,30 40,14 52,30 50,50 30,50', '#c9a07a'),
-        poly('22,36 26,28 26,44 22,44', '#4a4f5c'),
-        poly('54,28 58,36 58,44 54,44', '#4a4f5c'),
-        poly('26,46 40,52 38,56 28,50', '#4a4f5c'),
+        path('M13,80 L18,61 Q22,56 32,56 H48 Q58,56 62,61 L67,80 Z', '#1e3a5f', '#0f172a', '1'),
+        path('M33,56 L40,70 L47,56 Z', '#475569'),
+        path('M19,63 L29,57 M61,63 L51,57', 'none', '#60a5fa', '1.8'),
+        path('M35,48 V57 H45 V48 Z', '#c49372'),
+        path('M27,27 Q27,15 40,15 Q53,15 53,27 L52,40 Q51,48 40,51 Q29,48 28,40 Z', '#dba986', '#8a5f46', '0.9'),
+        path('M27,29 Q27,13 40,13 Q53,13 53,29 Q50,20 40,21 Q30,20 27,29 Z', '#1e293b'),
+        path('M31,30 Q34,29 37,30 M43,30 Q46,29 49,30', 'none', '#1e293b', '1.3'),
+        svgEl('circle', { cx: '34', cy: '34', r: '1.6', fill: '#1e293b' }),
+        svgEl('circle', { cx: '46', cy: '34', r: '1.6', fill: '#1e293b' }),
+        path('M40,35 L39.5,39.5 L41,40 M36,44 Q40,46 44,44', 'none', '#8f5642', '1.2'),
+        // Headset pengendali misi ganda
+        path('M24,33 Q24,11 40,11 Q56,11 56,33', 'none', '#475569', '2.5'),
+        svgEl('rect', { x: '22', y: '31', width: '5', height: '10', rx: '2', fill: '#334155', stroke: '#60a5fa', 'stroke-width': '1' }),
+        svgEl('rect', { x: '53', y: '31', width: '5', height: '10', rx: '2', fill: '#334155', stroke: '#60a5fa', 'stroke-width': '1' }),
+        path('M24,39 Q28,46 36,46', 'none', '#64748b', '1.3'),
+        svgEl('circle', { cx: '36.5', cy: '46', r: '1.2', fill: '#60a5fa', class: 'portrait-core' }),
       );
       break;
-    default:
+
+    default: // Beacon — kapsul relai antariksa purba
       svg.append(
-        poly('38,70 42,70 41,28 39,28', '#9aa3b0'),
-        svgEl('circle', { cx: '40', cy: '24', r: '5', fill: '#ffd24d' }),
-        svgEl('path', { d: 'M24 24 A16 16 0 0 1 56 24', fill: 'none', stroke: '#ffd24d', 'stroke-width': '2' }),
-        svgEl('path', { d: 'M14 24 A26 26 0 0 1 66 24', fill: 'none', stroke: '#ffd24d', 'stroke-width': '1.5', opacity: '0.6' }),
+        poly('10,36 27,41 27,48 10,43', '#1d4ed8', '#60a5fa', '0.9'),
+        poly('70,36 53,41 53,48 70,43', '#1d4ed8', '#60a5fa', '0.9'),
+        poly('31,36 49,36 52,44 48,58 32,58 28,44', '#d97706', '#facc15', '1.1'),
+        poly('34,58 46,58 44,64 36,64', '#64748b', '#94a3b8', '0.9'),
+        path('M28,32 Q40,38 52,32 L48,36 H32 Z', '#cbd5e1', '#94a3b8', '0.9'),
+        path('M40,34 V21', 'none', '#e2e8f0', '1.8'),
+        svgEl('circle', { cx: '40', cy: '19', r: '3.8', fill: '#facc15', class: 'portrait-core' }),
+        path('M29,19 A11,11 0 0 1 51,19', 'none', '#facc15', '1.5', { opacity: '0.85' }),
+        path('M21,19 A19,19 0 0 1 59,19', 'none', '#c084fc', '1.3', { opacity: '0.6' }),
       );
   }
   return svg;
@@ -176,7 +261,7 @@ export function showDialogSequence(host: HTMLElement, lines: DialogLine[], onDon
         portraitBox.dataset.speaking = 'false';
       }
     }, TYPE_MS);
-    next.textContent = index === lines.length - 1 ? STORY_UI.next : `${STORY_UI.next} ▶`;
+    next.textContent = STORY_UI.next;
     next.focus();
   };
   const advance = (): void => {

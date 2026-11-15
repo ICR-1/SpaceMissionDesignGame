@@ -20,7 +20,7 @@ describe('peringatan NOVA', () => {
     expect(warn(c).join(' ')).toMatch(/malam planet/);
   });
   it('aturan perakitan dilaporkan', () => {
-    const c = setExclusive(defaultMission('moon'), catalog, ['lander_s', 'lander_m'], null);
+    const c = setExclusive(defaultMission('moon'), catalog, ['apollo_lm', 'artemis_hls', 'mars_edl'], null);
     expect(warn(c)).toContain('Pasang tepat 1 lander.');
   });
   it('massa melebihi muatan roket', () => {

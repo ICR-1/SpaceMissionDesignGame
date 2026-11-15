@@ -7,9 +7,12 @@ import { seg } from './detail';
 const C = {
   hull: 0xe9edf3, stripe: 0xf08a24, dark: 0x30333c, steel: 0x9aa3b0, nozzle: 0x1a1b20,
   rim: 0x6b7280, cyan: 0x4fd1ff,
+  orangeFoam: 0xc85d1e, copper: 0x9e633b, soot: 0x20232a, red: 0xc93b32,
 };
 /** Aksen warna tiap tahap agar mudah dibedakan di preview. */
 export const STAGE_ACCENTS = [0xf08a24, 0xd94f4f, 0xe0b73a, 0x4f8fe0];
+
+export type RocketStyle = Rocket['visualStyle'];
 
 /** Dimensi tampilan (satuan scene). */
 const LOWER_STAGE_HEIGHT = 7;
@@ -48,10 +51,80 @@ function nozzle(r: number, y0: number, x = 0, z = 0): THREE.Group {
   return g;
 }
 
-function buildStageBody(index: number, r: number, h: number): THREE.Group {
+function nozzleCluster(coreR: number, ringCount: number, withCenter: boolean, bellR: number, ringR: number): THREE.Group {
+  const g = new THREE.Group();
+  if (withCenter) g.add(nozzle(bellR, 0, 0, 0));
+  for (let k = 0; k < ringCount; k++) {
+    const a = (k / ringCount) * Math.PI * 2 + (ringCount === 4 ? Math.PI / 4 : 0);
+    g.add(nozzle(bellR, 0, Math.cos(a) * coreR * ringR, Math.sin(a) * coreR * ringR));
+  }
+  return g;
+}
+
+function buildStageBody(index: number, r: number, h: number, style?: RocketStyle): THREE.Group {
   const g = new THREE.Group();
   g.name = `stage-${index}`;
   const accent = STAGE_ACCENTS[index % STAGE_ACCENTS.length];
+
+  if (style === 'falcon9') {
+    // Falcon 9 Block 5: tangki putih, interstage komposit hitam, 4 sirip kisi, 4 kaki pendaratan terlipat, octaweb 9x Merlin 1D
+    g.add(column(r * 0.98, r, 0, h * 0.78, C.hull, 10));
+    g.add(column(r * 1.01, r * 1.01, h * 0.78, h * 0.22, C.soot, 10));
+    g.add(column(r * 1.03, r * 1.03, 0, h * 0.08, C.soot, 10));
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      // 4 kaki pendaratan karbon terlipat ke atas
+      g.add(box(r * 0.16, h * 0.36, r * 0.08, C.soot, [ca * r * 1.02, h * 0.19, sa * r * 1.02], [0, -a + Math.PI / 2, 0]));
+      // 4 sirip kisi titanium di bawah interstage
+      g.add(box(r * 0.3, r * 0.06, r * 0.24, C.steel, [ca * r * 1.15, h * 0.73, sa * r * 1.15], [0, -a, 0]));
+    }
+    g.add(nozzleCluster(r, 8, true, r * 0.28, 0.56));
+    return g;
+  }
+
+  if (style === 'atlas5') {
+    // Atlas V Common Core Booster: tangki perunggu anodisasi tembaga + RD-180 twin nozzle
+    g.add(column(r * 0.98, r, 0, h, C.copper, 10));
+    g.add(column(r * 1.02, r * 1.02, h * 0.86, h * 0.14, C.hull, 10));
+    g.add(column(r * 1.02, r * 1.02, 0, h * 0.08, C.dark, 10));
+    g.add(nozzleCluster(r, 2, false, r * 0.45, 0.42));
+    return g;
+  }
+
+  if (style === 'sls') {
+    // SLS Core Stage: tangki busa jingga NASA (SOFI) + intertank bergaris + 4x RS-25 SSME
+    g.add(column(r * 0.98, r, 0, h, C.orangeFoam, 12));
+    g.add(column(r * 1.02, r * 1.02, h * 0.62, h * 0.12, C.orangeFoam, 12));
+    g.add(column(r * 1.02, r * 1.02, 0, h * 0.09, C.hull, 12));
+    g.add(column(r * 1.02, r * 1.02, h - 0.26, 0.26, C.dark, 12));
+    for (const side of [-1, 1]) {
+      g.add(box(r * 0.08, h * 0.78, r * 0.08, C.hull, [side * r * 1.02, h * 0.45, 0]));
+    }
+    g.add(nozzleCluster(r, 4, false, r * 0.36, 0.46));
+    return g;
+  }
+
+  if (style === 'saturn5') {
+    // Saturn V: S-IC putih dengan pola roll hitam ikonik & 4 sirip + 5x F-1; S-II putih/hitam + 5x J-2
+    g.add(column(r * 0.98, r, 0, h, C.hull, 12));
+    g.add(column(r * 1.03, r * 1.03, h - 0.35, 0.35, C.soot, 12));
+    if (index === 0) {
+      g.add(column(r * 1.02, r * 1.02, 0, h * 0.14, C.soot, 12));
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI * 2;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        // Garis roll hitam vertikal & sirip stabilisator S-IC
+        g.add(box(r * 0.26, h * 0.35, r * 0.08, C.soot, [ca * r * 0.96, h * 0.34, sa * r * 0.96], [0, -a + Math.PI / 2, 0]));
+        g.add(box(r * 0.55, r * 0.72, r * 0.07, C.hull, [ca * r * 1.18, h * 0.08, sa * r * 1.18], [0, -a, 0]));
+      }
+    } else {
+      g.add(column(r * 1.02, r * 1.02, h * 0.12, 0.28, C.red, 12));
+    }
+    g.add(nozzleCluster(r, 4, true, r * 0.34, 0.55));
+    return g;
+  }
+
   g.add(column(r * 0.97, r, 0, h, C.hull, 8));
   g.add(column(r * 1.01, r * 1.01, h * 0.12, 0.38, accent, 8));
   g.add(column(r * 1.01, r * 1.01, h * 0.55, 0.12, C.dark, 8));
@@ -64,16 +137,19 @@ function buildStageBody(index: number, r: number, h: number): THREE.Group {
  * Modul transfer (tahap terakhir): tangki propelan besar berkubah ganda dengan cincin penguat, rok antar-tahap,
  * rangka struktur, empat pod RCS, dan nosel berukuran lebih besar daripada tahap bawah.
  */
-function buildTransferStage(index: number, r: number, h: number): THREE.Group {
+function buildTransferStage(index: number, r: number, h: number, style?: RocketStyle): THREE.Group {
   const g = new THREE.Group();
   g.name = `stage-${index}`;
-  const accent = STAGE_ACCENTS[index % STAGE_ACCENTS.length];
+  const accent = style === 'sls' ? C.orangeFoam : style === 'saturn5' ? C.soot : STAGE_ACCENTS[index % STAGE_ACCENTS.length];
+  const tankColor = style === 'atlas5' ? C.steel : C.hull;
   // Rok mesin di bawah, badan tangki, dan rok atas
   g.add(column(r * 0.9, r * 1.0, 0, h * 0.14, C.dark, 12));
-  g.add(column(r * 0.98, r * 0.98, h * 0.14, h * 0.72, C.hull, 12));
+  g.add(column(r * 0.98, r * 0.98, h * 0.14, h * 0.72, tankColor, 12));
   g.add(column(r * 1.0, r * 0.9, h * 0.86, h * 0.14, C.dark, 12));
+  // Adaptor melingkar dudukan lander (menempel pada tahap transfer agar ikut terlepas saat separasi)
+  g.add(column(r * 0.88, r * 0.64, h, 0.12, C.steel, 12));
   // Kubah tangki tersembul di antara cincin
-  g.add(part(new THREE.SphereGeometry(r * 0.97, seg(12), seg(6), 0, Math.PI * 2, 0, Math.PI / 2), C.hull, [0, h * 0.86, 0]));
+  g.add(part(new THREE.SphereGeometry(r * 0.97, seg(12), seg(6), 0, Math.PI * 2, 0, Math.PI / 2), tankColor, [0, h * 0.86, 0]));
   // Cincin penguat dan aksen tahap
   for (const f of [0.3, 0.5, 0.7]) g.add(column(r * 1.03, r * 1.03, h * f, 0.1, f === 0.5 ? accent : C.steel, 12));
   // Rangka struktur vertikal di sekeliling tangki
@@ -92,31 +168,39 @@ function buildTransferStage(index: number, r: number, h: number): THREE.Group {
   return g;
 }
 
+/** Konfigurasi geometri booster samping berdasarkan gaya roket NASA. */
+export function boosterSpec(style?: RocketStyle): { count: number; angleOffset: number; radiusRatio: number; offsetGap: number } {
+  if (style === 'sls') return { count: 2, angleOffset: 0, radiusRatio: 0.46, offsetGap: 0.08 };
+  if (style === 'atlas5') return { count: 5, angleOffset: Math.PI / 5, radiusRatio: 0.3, offsetGap: 0.05 };
+  return { count: BOOSTER_COUNT, angleOffset: Math.PI / 4, radiusRatio: 0.38, offsetGap: 0.05 };
+}
+
 /** Posisi dan radius tiap booster samping (lokal terhadap grup tahap booster); dipakai badan dan api mesin. */
-export function boosterLayout(coreR: number): { x: number; z: number; r: number }[] {
-  const br = coreR * 0.38;
-  return Array.from({ length: BOOSTER_COUNT }, (_, k) => {
-    const a = (k / BOOSTER_COUNT) * Math.PI * 2 + Math.PI / 4;
-    return { x: Math.cos(a) * (coreR + br + 0.05), z: Math.sin(a) * (coreR + br + 0.05), r: br };
+export function boosterLayout(coreR: number, style?: RocketStyle): { x: number; z: number; r: number }[] {
+  const spec = boosterSpec(style);
+  const br = coreR * spec.radiusRatio;
+  return Array.from({ length: spec.count }, (_, k) => {
+    const a = (k / spec.count) * Math.PI * 2 + spec.angleOffset;
+    const dist = coreR + br + spec.offsetGap;
+    return { x: Math.cos(a) * dist, z: Math.sin(a) * dist, r: br };
   });
 }
 
 /** Apakah tahap ini berupa booster samping (api mesinnya di empat titik, bukan di tengah). */
 export const isBoosterStage = (name: string): boolean => isBooster(name);
 
-function buildBoosters(index: number, coreR: number, h: number): THREE.Group {
+function buildBoosters(index: number, coreR: number, h: number, style?: RocketStyle): THREE.Group {
   const g = new THREE.Group();
   g.name = `stage-${index}`;
-  const accent = STAGE_ACCENTS[index % STAGE_ACCENTS.length];
-  const br = coreR * 0.38;
-  for (let k = 0; k < BOOSTER_COUNT; k++) {
-    const a = (k / BOOSTER_COUNT) * Math.PI * 2 + Math.PI / 4;
-    const x = Math.cos(a) * (coreR + br + 0.05);
-    const z = Math.sin(a) * (coreR + br + 0.05);
-    g.add(column(br, br, 0, h, C.hull, 7, x, z));
-    g.add(column(br * 1.03, br * 1.03, h * 0.15, 0.3, accent, 7, x, z));
-    g.add(part(new THREE.ConeGeometry(br, br * 2.2, seg(7)), C.dark, [x, h + br * 1.1, z]));
-    g.add(nozzle(br * 1.3, 0, x, z));
+  const accent = style === 'sls' ? C.red : STAGE_ACCENTS[index % STAGE_ACCENTS.length];
+  for (const b of boosterLayout(coreR, style)) {
+    g.add(column(b.r, b.r, 0, h, C.hull, 8, b.x, b.z));
+    g.add(column(b.r * 1.03, b.r * 1.03, h * 0.16, 0.28, accent, 8, b.x, b.z));
+    if (style === 'sls') {
+      g.add(column(b.r * 1.03, b.r * 1.03, h * 0.72, 0.24, C.soot, 8, b.x, b.z));
+    }
+    g.add(part(new THREE.ConeGeometry(b.r, b.r * 2.3, seg(8)), style === 'sls' ? C.hull : C.dark, [b.x, h + b.r * 1.15, b.z]));
+    g.add(nozzle(b.r * 1.3, 0, b.x, b.z));
   }
   return g;
 }
@@ -146,17 +230,18 @@ export function buildRocket(rocket: Rocket): RocketModel {
 
   const bodyHeight = (i: number): number => Math.max(MIN_STAGE_HEIGHT, LOWER_STAGE_HEIGHT - STAGE_HEIGHT_STEP * i);
 
+  const style = rocket.visualStyle;
   rocket.stages.forEach((stage, i) => {
     const last = i === n - 1;
     let group: THREE.Group;
     if (isBooster(stage.name)) {
       const h = bodyHeight(i) + 0.5;
-      group = buildBoosters(i, radius, h);
+      group = buildBoosters(i, radius, h, style);
       group.position.y = y;
       stageTopY.push(y + h);
     } else {
       const h = last ? TRANSFER_HEIGHT : bodyHeight(i);
-      group = last ? buildTransferStage(i, radius, h) : buildStageBody(i, radius, h);
+      group = last ? buildTransferStage(i, radius, h, style) : buildStageBody(i, radius, h, style);
       group.position.y = y;
       y += h;
       stageTopY.push(y);
@@ -180,9 +265,6 @@ export function buildRocket(rocket: Rocket): RocketModel {
   const fairingLeft = buildFairingHalf(-1, fairingR, y);
   const fairingRight = buildFairingHalf(1, fairingR, y);
   root.add(fairingLeft, fairingRight);
-
-  // Penyangga dudukan lander di atas modul transfer
-  landerSlot.add(box(radius * 0.9, 0.12, radius * 0.9, C.steel, [0, 0.06, 0]));
 
   return {
     root, stageGroups, fairingLeft, fairingRight, landerSlot, boundaryRings, radius,

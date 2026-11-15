@@ -16,7 +16,7 @@ import { browserStorage, loadSave, writeSave } from './save';
 import { createGameStore, type Store, type GameState } from './store';
 import { createSettings } from '../ui/settings';
 import { STRINGS } from './strings';
-import { buildPreloadSteps, runPreload } from './preload';
+import { buildPreloadSteps, nextFrame, runPreload } from './preload';
 import { LoadingScreen } from '../ui/loading';
 import { createBriefingScene } from '../scenes/briefing';
 import { createDesignScene } from '../scenes/design';
@@ -52,7 +52,7 @@ export class Game {
     // ACES Filmic menjaga warna terang tidak pecah dan bayangan tetap terbaca (VISUAL_POLISH 2).
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = VISUAL.exposure;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.applyShadows(this.store.get().save.shadows);
     setDetail(this.store.get().save.detail);
     this.quality = new AdaptiveQuality(baseRatio);
@@ -95,6 +95,10 @@ export class Game {
     for (const e of errors) console.error('Pemuatan awal gagal:', e);
     if (errors.length > 0) loading.warn();
     this.scenes.switchTo(this.store.get().currentScene);
+    await this.scenes.waitReady();
+    // Hangatkan shader WebGL & render frame awal di balik layar memuat agar transisi pembuka mulus 60 FPS.
+    this.scenes.render();
+    await nextFrame();
     this.last = performance.now();
     requestAnimationFrame((t) => this.frame(t));
     loading.hide();

@@ -16,6 +16,7 @@ import { modeRules, selectableDestinationIds } from '../rules/progress';
 import type { MissionConfig } from '../rules/types';
 import { clampToZone } from '../ui/labelLayout';
 import { DesignPanel } from '../ui/panels';
+import { TutorGuide } from '../ui/tutorOverlay';
 import { BaseScene } from './baseScene';
 
 const ROCKET_X = -5;
@@ -54,12 +55,14 @@ export class DesignScene extends BaseScene {
   private labelSource: { name: string; stages: { name: string; burn: number }[] } | null = null;
   private orbit: OrbitCamera | null = null;
   private panel: DesignPanel | null = null;
+  private tutor: TutorGuide | null = null;
   private config!: MissionConfig;
   private requireObjectives = true;
   private rocket: RocketModel | null = null;
   private mounted: THREE.Group | null = null;
   private display: THREE.Group | null = null;
   private popT = POP_SEC;
+  private clock = 0;
   private rocketId = '';
   private landerKey = '';
   private labelLayer: HTMLElement | null = null;
@@ -160,10 +163,13 @@ export class DesignScene extends BaseScene {
       launch: () => this.launch(),
     }, { unlocked, flagged: this.ctx.store.get().flaggedSections });
     this.refresh();
+    this.tutor = new TutorGuide(ui, this.ctx.store, 'design');
     this.orbit.update(0, this.camera);
   }
 
   protected override onExit(): void {
+    this.tutor?.dispose();
+    this.tutor = null;
     this.orbit?.dispose();
     this.orbit = null;
     this.panel = null;
@@ -373,6 +379,7 @@ export class DesignScene extends BaseScene {
   }
 
   update(dt: number): void {
+    this.clock += dt;
     const zoom = Number(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
     if (zoom !== this.lastZoom) {
       this.frameCamera();
@@ -381,6 +388,12 @@ export class DesignScene extends BaseScene {
     this.orbit?.update(dt, this.camera);
     this.placeLabels();
     if (this.display) this.display.rotation.y += dt * TURNTABLE_SPEED;
+    if (this.refAstronaut) {
+      this.refAstronaut.update(dt, {
+        speed01: 0, run: false, airborne: false, oxygen01: 1,
+        action: Math.floor(this.clock / 4) % 2 === 0 ? 'inspect' : 'comms',
+      });
+    }
     if (this.popT < POP_SEC) {
       this.popT += dt;
       const k = Math.min(1, this.popT / POP_SEC);

@@ -122,7 +122,10 @@ function toTexture(data: Uint8ClampedArray, size: number, srgb: boolean): THREE.
   canvas.width = canvas.height = size;
   const g = canvas.getContext('2d');
   if (!g) throw new Error('Canvas 2D tidak tersedia');
-  g.putImageData(new ImageData(new Uint8ClampedArray(data), size, size), 0, 0);
+  const pixels = data.buffer instanceof ArrayBuffer
+    ? (data as Uint8ClampedArray<ArrayBuffer>)
+    : new Uint8ClampedArray(data);
+  g.putImageData(new ImageData(pixels, size, size), 0, 0);
   const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 1; // anisotropi tinggi sangat mahal pada rasterizer software; ubin kecil tetap tajam berkat mipmap
@@ -130,15 +133,19 @@ function toTexture(data: Uint8ClampedArray, size: number, srgb: boolean): THREE.
   return t;
 }
 
-/** Tekstur permukaan (albedo dan bump) satu destinasi; dibuat sekali lalu di-cache. Dipakai juga oleh pemuatan awal. Butuh DOM. */
-export function surfaceTextures(kind: SurfaceKind): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
+/** Isi cache tekstur permukaan dari data piksel siap pakai (mis. hasil Web Worker). */
+export function seedSurfaceTextures(kind: SurfaceKind, maps: SurfaceMaps): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
   let entry = cache.get(kind);
   if (!entry) {
-    const maps = generateSurfaceMaps(kind);
     entry = { map: toTexture(maps.albedo, maps.size, true), bump: toTexture(maps.height, maps.size, false) };
     cache.set(kind, entry);
   }
   return entry;
+}
+
+/** Tekstur permukaan (albedo dan bump) satu destinasi; dibuat sekali lalu di-cache. Dipakai juga oleh pemuatan awal. Butuh DOM. */
+export function surfaceTextures(kind: SurfaceKind): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
+  return cache.get(kind) ?? seedSurfaceTextures(kind, generateSurfaceMaps(kind));
 }
 
 /** Pasang tekstur permukaan destinasi pada material terrain bersama (di-cache per jenis). Butuh DOM. */

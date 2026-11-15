@@ -2,11 +2,11 @@ import type { SceneId } from './constants';
 
 export type CursorPredicate = () => boolean;
 
-/** Scene gameplay 3D yang memakai pointer lock. */
-const is3d = (sceneId: SceneId): boolean => sceneId === 'flight' || sceneId === 'surface';
+/** Scene gameplay 3D yang memakai pointer lock (eksplorasi permukaan). */
+const is3d = (sceneId: SceneId): boolean => sceneId === 'surface';
 
 /**
- * Daftar kode tombol gameplay di scene 3D (penerbangan dan permukaan).
+ * Daftar kode tombol gameplay di scene Permukaan 3D.
  * Menekan tombol ini saat kursor tidak sedang diwajibkan oleh dialog/modal
  * akan otomatis mengunci kembali pointer (smart auto-lock).
  */
@@ -72,7 +72,7 @@ export class CursorManager {
       // Tombol Alt: smart toggle kursor manual
       if (e.code === 'AltLeft' || e.code === 'AltRight') {
         e.preventDefault();
-        this.toggle();
+        if (!e.repeat) this.toggle(); // tahan Alt tidak boleh mengunci/melepas kursor berulang-ulang
         return;
       }
 

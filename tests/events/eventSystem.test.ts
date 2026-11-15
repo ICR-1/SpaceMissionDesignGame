@@ -8,7 +8,7 @@ import { createRng } from '../../src/core/rng';
 import { resolveAssembly } from '../../src/rules/catalog';
 import { createFlightSimConfig, FlightSim, NO_INPUT } from '../../src/rules/flightSim';
 import { makeAutopilot } from '../../src/rules/autopilot';
-import { FIXED_DT } from '../../src/core/constants';
+import { FIXED_DT, G0 } from '../../src/core/constants';
 import { applyEffects, createSurfaceState } from '../../src/rules/surface';
 import { catalog } from '../rules/helpers';
 
@@ -109,7 +109,10 @@ describe('event penerbangan', () => {
     expect(hit.transfer!.fuelRemainingKg).toBeLessThan(fuel);
     expect(hit.ended).toBe(false);
     const doomed = reachCapture();
-    const evs = doomed.applyDvAdjust(-5000);
+    // Penalti harus melebihi sisa delta-v wahana (Isp 454 s dan propelan Bulan sekitar 4.000+ kg tidak habis oleh -5.000 m/s).
+    const dvLeft = doomed.cfg.ispS * G0 * Math.log((doomed.cfg.mfKg + doomed.spacecraftFuelKg) / doomed.cfg.mfKg);
+    expect(dvLeft).toBeGreaterThan(0);
+    const evs = doomed.applyDvAdjust(-(dvLeft + 100));
     expect(doomed.ended).toBe(true);
     expect(evs.some((e) => e.type === 'ended')).toBe(true);
     expect(doomed.summary()!.failCodes).toContain('LOW_FUEL');

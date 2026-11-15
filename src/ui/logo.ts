@@ -36,15 +36,19 @@ export function createLogo(label: string, animate: boolean): HTMLElement {
   const front = `M${CX - rx} ${CY} A${rx} ${ry} 0 0 0 ${CX + rx} ${CY}`;
   const loop = `${front} A${rx} ${ry} 0 0 0 ${CX - rx} ${CY}`;
   const extrude = Array.from({ length: 7 }, (_, i) => `<use href="#astra-word" transform="translate(0 ${14 - i * 2})" stroke="${i === 0 ? '#050816' : '#3730a3'}" stroke-width="42"/>`).join('');
-  // Gerak dikurangi: roket diam di titik terdepan orbit (bawah tengah), menghadap arah terbangnya.
-  const rocketPlace = animate ? '' : ` transform="translate(${CX} ${CY + ry})"`;
-  const rocket = `<g class="logo-rocket"${rocketPlace}>
-      <path d="M-14 -7 L-24 0 L-14 7 Z" fill="#fb923c"/><path d="M-12 -4 L-19 0 L-12 4 Z" fill="#fde68a"/>
+  const rocketShape = `<path d="M-14 -7 L-24 0 L-14 7 Z" fill="#fb923c"/><path d="M-12 -4 L-19 0 L-12 4 Z" fill="#fde68a"/>
       <path d="M-14 -6 H6 Q18 -6 22 0 Q18 6 6 6 H-14 Z" fill="#f8fafc" stroke="#0b1437" stroke-width="2.5"/>
       <circle cx="5" cy="0" r="3" fill="#38bdf8" stroke="#0b1437" stroke-width="1.5"/>
-      <path d="M-10 -6 L-16 -12 L-4 -6 Z M-10 6 L-16 12 L-4 6 Z" fill="#f87171" stroke="#0b1437" stroke-width="2"/>
-      ${animate ? `<animateMotion dur="10s" repeatCount="indefinite" rotate="auto" path="${loop}"/>` : ''}
-    </g>`;
+      <path d="M-10 -6 L-16 -12 L-4 -6 Z M-10 6 L-16 12 L-4 6 Z" fill="#f87171" stroke="#0b1437" stroke-width="2"/>`;
+  const motion = `<animateMotion dur="10s" repeatCount="indefinite" rotate="auto" path="${loop}"/>`;
+  // Separuh lintasan depan (0-0.5) tampil di depan tulisan; separuh atas/belakang (0.5-1) pindah ke lapisan belakang tulisan.
+  const rocketLayer = (opacityInit: 0 | 1, values: string): string =>
+    `<g class="logo-rocket" opacity="${opacityInit}">${rocketShape}${motion}<animate attributeName="opacity" values="${values}" keyTimes="0;0.5" calcMode="discrete" dur="10s" repeatCount="indefinite"/></g>`;
+  // Gerak dikurangi: roket diam di titik terdepan orbit (bawah tengah), menghadap arah terbangnya.
+  const rocketBack = animate ? rocketLayer(0, '0;1') : '';
+  const rocketFront = animate
+    ? rocketLayer(1, '1;0')
+    : `<g class="logo-rocket" transform="translate(${CX} ${CY + ry})">${rocketShape}</g>`;
   wrap.innerHTML = `
 <svg viewBox="0 0 720 270" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <defs>
@@ -63,6 +67,7 @@ export function createLogo(label: string, animate: boolean): HTMLElement {
   <g transform="rotate(${tilt} ${CX} ${CY})">
     <path d="${back}" fill="none" stroke="#0b1437" stroke-width="12" stroke-linecap="round"/>
     <path d="${back}" fill="none" stroke="url(#astra-ring)" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
+    ${rocketBack}
   </g>
   ${extrude}
   <use href="#astra-word" stroke="#0b1437" stroke-width="42"/>
@@ -72,7 +77,7 @@ export function createLogo(label: string, animate: boolean): HTMLElement {
   <g transform="rotate(${tilt} ${CX} ${CY})">
     <path d="${front}" fill="none" stroke="#0b1437" stroke-width="12" stroke-linecap="round"/>
     <path d="${front}" fill="none" stroke="url(#astra-ring)" stroke-width="6" stroke-linecap="round"/>
-    ${rocket}
+    ${rocketFront}
   </g>
   ${SPARKS.map(([x, y, s], i) => spark(x, y, s, i)).join('')}
 </svg>`;

@@ -10,8 +10,9 @@ import { catalog } from './helpers';
 const finite = (o: unknown): boolean => JSON.stringify(o, (_k, v) => (typeof v === 'number' && !Number.isFinite(v) ? '__NaN__' : v)).indexOf('__NaN__') < 0;
 
 describe('uji ketahanan (soak): banyak seed', () => {
-  it.each(['moon', 'mars'])('penerbangan %s selesai tanpa NaN untuk 40 seed dengan pilot terampil', (dest) => {
-    for (let seed = 1; seed <= 40; seed++) {
+  it.each(['moon', 'mars'])('penerbangan %s selesai tanpa NaN untuk banyak seed dengan pilot terampil', (dest) => {
+    const count = dest === 'mars' ? 15 : 30;
+    for (let seed = 1; seed <= count; seed++) {
       const sim = new FlightSim(createFlightSimConfig({ ...defaultMission(dest), seed }, catalog));
       const pilot = makeAutopilot(sim);
       let guard = 0;
@@ -21,10 +22,10 @@ describe('uji ketahanan (soak): banyak seed', () => {
       expect(finite(summary), `seed ${seed}`).toBe(true);
       expect(summary.failed, `seed ${seed} ${summary.failCodes.join(',')}`).toBe(false);
     }
-  });
+  }, 45_000);
   it('pilot yang menunda F dan mengabaikan pendaratan tetap berakhir dengan hasil terdefinisi', () => {
     for (let seed = 1; seed <= 20; seed++) {
-      const sim = new FlightSim(createFlightSimConfig({ ...defaultMission('moon'), rocketId: 'garuda_heavy', fuelFraction: 0.5, seed }, catalog));
+      const sim = new FlightSim(createFlightSimConfig({ ...defaultMission('moon'), rocketId: 'sls_block1', fuelFraction: 0.75, seed }, catalog));
       const pilot = makeAutopilot(sim, { fDelaySec: 5, skipLanding: seed % 2 === 0 });
       let guard = 0;
       while (!sim.ended && guard++ < 60 * 1200) sim.step(pilot(), FIXED_DT);

@@ -67,7 +67,7 @@ describe('Lunar Cruiser (model 3D)', () => {
   });
   it('lander membawa Cruiser hanya jika modulnya terpasang dan carryRover aktif', () => {
     const base = defaultMission('moon');
-    const a = resolveAssembly({ ...base, moduleIds: [...base.moduleIds, 'rover_lc'] }, catalog);
+    const a = resolveAssembly({ ...base, moduleIds: [...base.moduleIds, 'rover_ltv'] }, catalog);
     const plain = resolveAssembly(base, catalog);
     expect(buildLander(a.modules, a.instruments).userData.carriesRover).toBe(true);
     expect(buildLander(a.modules, a.instruments, false).userData.carriesRover).toBeUndefined();
@@ -83,7 +83,8 @@ describe('pelat dek lander (anti z-fighting)', () => {
       const lander = buildLander(a.modules, a.instruments, false);
       const body = lander.getObjectByName('lander-body') as THREE.Mesh;
       const pos = body.geometry.getAttribute('position');
-      const bodyTop = 0.9 + 1.1; // LEG_HEIGHT + tinggi lander_s
+      const landerR = 1.05; // jari-jari badan apollo_lm (lander bawaan Bulan)
+      const bodyTop = 0.9 + 1.05; // LEG_HEIGHT + tinggi apollo_lm
       let plateR = 0;
       let capR = 0;
       for (let i = 0; i < pos.count; i++) {
@@ -93,7 +94,7 @@ describe('pelat dek lander (anti z-fighting)', () => {
         if (Math.abs(y - (bodyTop + 0.06)) < 1e-3) plateR = Math.max(plateR, r);
         if (Math.abs(y - bodyTop) < 0.03) capR = Math.max(capR, r < 0.97 ? r : 0);
       }
-      expect(plateR).toBeGreaterThanOrEqual(0.9 + 0.055);
+      expect(plateR).toBeGreaterThanOrEqual(landerR * 0.9 + 0.055);
       expect(plateR).toBeGreaterThan(capR);
     }
   });
@@ -102,7 +103,7 @@ describe('pelat dek lander (anti z-fighting)', () => {
 describe('skala lander terhadap astronot dan Lunar Cruiser', () => {
   const base = defaultMission('moon');
   const plain = resolveAssembly(base, catalog);
-  const withCruiser = resolveAssembly({ ...base, moduleIds: [...base.moduleIds, 'rover_lc'] }, catalog);
+  const withCruiser = resolveAssembly({ ...base, moduleIds: [...base.moduleIds, 'rover_ltv'] }, catalog);
 
   it('lander berukuran wajar terhadap astronot 2 m: tinggi dek ~5 m dan telapak ~9 m pada skala dunia', () => {
     const lander = buildLander(plain.modules, plain.instruments, false);

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { CAMERA_FOV } from '../core/constants';
 import type { GameContext } from '../core/context';
-import { setDestination } from '../core/missionBuilder';
-import { STORY_UI, TITLE_UI } from '../core/strings';
+import { defaultMission, setDestination } from '../core/missionBuilder';
+import { STORY_UI, TITLE_UI, TUTOR_UI } from '../core/strings';
 import { linesFor } from '../rules/dialogs';
 import { modeRules, selectableDestinationIds, suggestedDestinationIndex } from '../rules/progress';
+import { shouldOfferTutor, startTutor, stopTutor } from '../rules/tutor';
 import type { Destination, Id } from '../rules/types';
 import { Orrery } from '../gen/orrery';
 import { carouselFrame, focusForDestination, type OrreryFocus } from '../gen/solarSystemData';
@@ -14,6 +15,7 @@ import { renderKeyHints } from '../ui/keyHints';
 import { createLogo } from '../ui/logo';
 import { attachTooltip } from '../ui/tooltip';
 import type { GlossaryKey } from '../ui/tooltip';
+import { showTutorOffer } from '../ui/tutorOverlay';
 import { nudgeApart, type LabelBox } from '../ui/labelLayout';
 import { BaseScene } from './baseScene';
 
@@ -36,7 +38,7 @@ const easeInOut = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t 
 
 /**
  * Briefing: tata surya interaktif, intro cerita (sekali), lalu menu karusel pilih tujuan (planet besar di tengah,
- * panah kiri/kanan, tombol Mulai), dialog Dr. Sekar, dan tutorial NOVA.
+ * panah kiri/kanan, tombol Mulai), dialog Dr. Bil Mark Hawking, dan tutorial NOVA.
  */
 export class BriefingScene extends BaseScene {
   readonly id = 'briefing' as const;
@@ -67,6 +69,7 @@ export class BriefingScene extends BaseScene {
   /** Tombol menu utama dan indeks yang sedang disorot (panah/hover/Tab memindahkan sorotan yang sama). */
   private titleButtons: HTMLButtonElement[] = [];
   private titleSel = 0;
+  private loadPromise: Promise<void> = Promise.resolve();
 
   constructor(ctx: GameContext) {
     super(ctx);
@@ -95,6 +98,9 @@ export class BriefingScene extends BaseScene {
     this.busy = false;
     // Label scene di kiri atas tidak dipakai di Briefing: tempatnya untuk tombol kembali ke menu utama.
     document.body.classList.add('briefing-active');
+    if (this.ctx.store.get().tutor.active) {
+      this.ctx.store.set({ tutor: stopTutor() });
+    }
     const { save, mode } = this.ctx.store.get();
     this.focus = 'overview';
     this.flyT = 1;
@@ -105,7 +111,7 @@ export class BriefingScene extends BaseScene {
     this.index = suggestedDestinationIndex(ids, selectableDestinationIds(save, this.ctx.catalog.destinations, mode), save.stars);
     this.orrery = new Orrery(this.ctx.store.get().mission.seed);
     this.scene.add(this.orrery.root);
-    void this.orrery.load(() => this.refreshLabels());
+    this.loadPromise = this.orrery.load(() => this.refreshLabels());
     this.labelLayer = el('div', 'label-layer');
     ui.appendChild(this.labelLayer);
     this.ctx.input.clear();
@@ -221,6 +227,10 @@ export class BriefingScene extends BaseScene {
     else if (enter && !this.titleButtons.includes(document.activeElement as HTMLButtonElement)) this.titleButtons[this.titleSel]?.click();
   }
 
+  whenReady(): Promise<void> {
+    return this.loadPromise;
+  }
+
   protected override onExit(): void {
     document.body.classList.remove('title-active', 'briefing-active');
     this.title = null;
@@ -295,6 +305,7 @@ export class BriefingScene extends BaseScene {
 
     const menu = el('div', 'mission-select');
     const top = el('div', 'ms-top');
+    const modeRow = el('div', 'ms-mode-row');
     const tabs = el('div', 'mode-tabs');
     for (const [id, label] of [['story', STORY_UI.modeStory], ['free', STORY_UI.modeFree]] as const) {
       const tab = el('button', 'mode-tab', label);
@@ -309,7 +320,11 @@ export class BriefingScene extends BaseScene {
       });
       tabs.appendChild(tab);
     }
-    top.append(tabs, el('p', 'mode-hint', rules.storyDialogs ? STORY_UI.modeStoryHint : STORY_UI.modeFreeHint));
+    const tutorBtn = el('button', 'ms-tutor-btn', TUTOR_UI.buttonLabel);
+    tutorBtn.type = 'button';
+    tutorBtn.addEventListener('click', () => this.launchTutor());
+    modeRow.append(tabs, tutorBtn);
+    top.append(modeRow, el('p', 'mode-hint', rules.storyDialogs ? STORY_UI.modeStoryHint : STORY_UI.modeFreeHint));
     if (rules.recordsProgress) {
       const beacons = save.beacons.length > 0 ? save.beacons.map((b) => b.replace('beacon_', '')).join(', ') : STORY_UI.none;
       top.appendChild(el('div', 'progress-line', `${STORY_UI.progress}: ${STORY_UI.sciencePoints} ${save.sciencePoints} · ${STORY_UI.beacons}: ${beacons}`));
@@ -398,6 +413,23 @@ export class BriefingScene extends BaseScene {
     this.renderMenu(ui, delta > 0 ? 1 : -1);
   }
 
+  /** Memulai Tur Pengenalan interaktif menuju Bulan untuk pemain baru atau pengulangan panduan. */
+  private launchTutor(): void {
+    if (this.busy) return;
+    this.busy = true;
+    this.menu?.remove();
+    this.menu = null;
+    const seed = this.ctx.store.get().mission.seed;
+    this.ctx.store.set({
+      mode: 'story',
+      mission: defaultMission('moon', seed),
+      flaggedSections: [],
+      tutor: startTutor(),
+    });
+    this.busy = false;
+    this.ctx.go('design');
+  }
+
   private startBriefing(ui: HTMLElement, destinationId: Id): void {
     if (this.busy) return;
     const { save: s0, mode } = this.ctx.store.get();
@@ -415,8 +447,27 @@ export class BriefingScene extends BaseScene {
     const dialogs = this.ctx.catalog.dialogs;
     const lines = [...linesFor(dialogs, `briefing_${destinationId}`)];
     const save = this.ctx.store.get().save;
-    if (!save.tutorialSeen) lines.push(...linesFor(dialogs, 'tutorial'));
+    const offerTutor = shouldOfferTutor(save, this.ctx.store.get().mode, destinationId);
+    if (!save.tutorialSeen && !offerTutor) lines.push(...linesFor(dialogs, 'tutorial'));
     showDialogSequence(ui, lines, () => {
+      if (offerTutor) {
+        showTutorOffer(
+          ui,
+          () => {
+            this.busy = false;
+            this.launchTutor();
+          },
+          () => {
+            this.ctx.store.set({
+              save: { ...this.ctx.store.get().save, tutorialSeen: true },
+              tutor: stopTutor(),
+            });
+            this.busy = false;
+            this.ctx.go('design');
+          },
+        );
+        return;
+      }
       if (!save.tutorialSeen) this.ctx.store.set({ save: { ...this.ctx.store.get().save, tutorialSeen: true } });
       this.busy = false;
       this.ctx.go('design');

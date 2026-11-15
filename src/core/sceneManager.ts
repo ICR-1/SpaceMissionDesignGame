@@ -7,6 +7,7 @@ export interface GameScene {
   update(dt: number): void;
   render(): void;
   resize(width: number, height: number): void;
+  whenReady?(): Promise<void>;
 }
 
 /** Mengelola scene aktif; sengaja bebas dari Three.js agar mudah diuji. */
@@ -51,5 +52,9 @@ export class SceneManager {
 
   resize(width: number, height: number): void {
     this.scenes.forEach((s) => s.resize(width, height));
+  }
+
+  async waitReady(): Promise<void> {
+    await this.active?.whenReady?.();
   }
 }

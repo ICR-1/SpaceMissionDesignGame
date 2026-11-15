@@ -159,7 +159,7 @@ describe('dialog cerita', () => {
   it('briefing Bulan tidak ikut memuat briefing Mars', () => {
     expect(linesFor(catalog.dialogs, 'briefing_moon').every((d) => d.id.startsWith('briefing_moon'))).toBe(true);
   });
-  it('pembicara hanya NOVA, Dr. Sekar, Ground Control, dan Beacon; teks berbahasa Indonesia tidak kosong', () => {
+  it('pembicara hanya NOVA, Dr. Bil Mark Hawking, Ground Control, dan Beacon; teks berbahasa Indonesia tidak kosong', () => {
     for (const d of catalog.dialogs) {
       expect(['nova', 'sekar', 'ground', 'beacon']).toContain(d.speaker);
       expect(d.text.length).toBeGreaterThan(10);

@@ -45,15 +45,19 @@ export function scatterRocks(terrain: Terrain, seed: number, baseColor: string, 
   const color = new THREE.Color();
   const base = new THREE.Color(baseColor);
   const half = terrain.size / 2 - 6;
+  const placedCircles: { x: number; z: number; r: number }[] = [];
   let placed = 0;
   let guard = 0;
   while (placed < count && guard++ < count * 20) {
     const x = rngRange(rng, -half, half);
     const z = rngRange(rng, -half, half);
     if (Math.hypot(x, z) > half) continue;
-    if (avoid.some((a) => Math.hypot(x - a.x, z - a.z) < a.r)) continue;
     const big = rng() < BOULDER_CHANCE;
     const s = big ? rngRange(rng, ROCK_MAX, BOULDER_SCALE) : rngRange(rng, ROCK_MIN, ROCK_MAX);
+    const rockR = s * 1.15;
+    if (avoid.some((a) => Math.hypot(x - a.x, z - a.z) < a.r + rockR * 0.5)) continue;
+    if (placedCircles.some((p) => Math.hypot(x - p.x, z - p.z) < p.r + rockR)) continue;
+    placedCircles.push({ x, z, r: rockR });
     e.set(rngRange(rng, 0, Math.PI), rngRange(rng, 0, Math.PI * 2), rngRange(rng, 0, Math.PI));
     q.setFromEuler(e);
     m.compose(

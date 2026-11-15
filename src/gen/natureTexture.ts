@@ -128,7 +128,7 @@ export function generateConcreteMap(seed = 1, size = NATURE_TEXTURE_SIZE): Uint8
 }
 
 function dataTexture(data: Uint8ClampedArray, size: number, repeat: boolean, anisotropy = 1): THREE.DataTexture {
-  const t = new THREE.DataTexture(new Uint8Array(data.buffer.slice(0)), size, size, THREE.RGBAFormat);
+  const t = new THREE.DataTexture(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), size, size, THREE.RGBAFormat);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
   t.magFilter = THREE.LinearFilter;
@@ -143,12 +143,22 @@ export interface NatureTextures { ground: THREE.DataTexture; water: THREE.DataTe
 
 let cached: NatureTextures | null = null;
 
+/** Isi cache tekstur alam dari data piksel siap pakai (mis. hasil Web Worker). */
+export function seedNatureTextures(maps: { ground: Uint8ClampedArray; water: Uint8ClampedArray; concrete: Uint8ClampedArray }): NatureTextures {
+  cached ??= {
+    ground: dataTexture(maps.ground, NATURE_TEXTURE_SIZE, true, GROUND_ANISOTROPY),
+    water: dataTexture(maps.water, NATURE_TEXTURE_SIZE, true),
+    concrete: dataTexture(maps.concrete, NATURE_TEXTURE_SIZE, false),
+  };
+  return cached;
+}
+
 /** Tekstur alam (dibuat sekali lalu dibagi). Tidak butuh DOM. */
 export function natureTextures(seed = 1): NatureTextures {
-  cached ??= {
-    ground: dataTexture(generateGroundMap(seed), NATURE_TEXTURE_SIZE, true, GROUND_ANISOTROPY),
-    water: dataTexture(generateWaterMap(seed), NATURE_TEXTURE_SIZE, true),
-    concrete: dataTexture(generateConcreteMap(seed), NATURE_TEXTURE_SIZE, false),
-  };
+  cached ??= seedNatureTextures({
+    ground: generateGroundMap(seed),
+    water: generateWaterMap(seed),
+    concrete: generateConcreteMap(seed),
+  });
   return cached;
 }

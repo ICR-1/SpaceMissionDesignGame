@@ -18,8 +18,8 @@ const F = {
 
 export interface FacilityPlan { kind: FacilityKind; x: number; z: number; rot: number }
 
-/** Jarak minimum antar bangunan dan jangkauan dari landasan (m); area ini di dalam zona bebas pohon (95 m). */
-export const FACILITY_LAYOUT = { count: 5, minRadiusM: 58, maxRadiusM: 118, minSpacingM: 46 } as const;
+/** Jarak minimum antar bangunan dan jangkauan dari landasan (m); dijaga cukup lebar agar slab 1,8x tidak bertumpuk. */
+export const FACILITY_LAYOUT = { count: 5, minRadiusM: 62, maxRadiusM: 124, minSpacingM: 60 } as const;
 /** Skala bangunan (meter nyata): hanggar sekitar 25 x 36 m dengan tinggi 13 m, pusat kendali sekitar 22 x 18 x 16 m. */
 export const FACILITY_SCALE = 1.8;
 
@@ -30,7 +30,7 @@ export function planFacilities(seed: number): FacilityPlan[] {
   const rng = createRng((seed ^ 0xfac11) >>> 0);
   const plans: FacilityPlan[] = [];
   let guard = 0;
-  while (plans.length < FACILITY_LAYOUT.count && guard++ < 400) {
+  while (plans.length < FACILITY_LAYOUT.count && guard++ < 800) {
     const a = rngRange(rng, 0, Math.PI * 2);
     const d = rngRange(rng, FACILITY_LAYOUT.minRadiusM, FACILITY_LAYOUT.maxRadiusM);
     const x = Math.cos(a) * d, z = Math.sin(a) * d;
