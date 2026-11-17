@@ -172,6 +172,7 @@ export class DesignScene extends BaseScene {
     this.tutor = null;
     this.orbit?.dispose();
     this.orbit = null;
+    this.panel?.dispose();
     this.panel = null;
     this.labelLayer = null;
     this.labels = [];
@@ -182,6 +183,26 @@ export class DesignScene extends BaseScene {
     if (this.refStage) { this.displayStage.remove(this.refStage); disposeTree(this.refStage); }
     this.refStage = null;
     this.clearModels();
+  }
+
+  onLanguageChange(): void {
+    if (!this.ui || !this.panel) return;
+    const uiState = this.panel.getUiState();
+    this.panel.dispose();
+    const state = this.ctx.store.get();
+    const unlocked = selectableDestinationIds(state.save, this.ctx.catalog.destinations, state.mode);
+    this.panel = new DesignPanel(this.ui, this.ctx.catalog, this.config, {
+      change: (fn) => this.applyConfig(fn(this.config)),
+      launch: () => this.launch(),
+    }, { unlocked, flagged: state.flaggedSections });
+    this.panel.restoreUiState(uiState);
+    const catalog = this.ctx.catalog;
+    const result = preflight(this.config, catalog, this.requireObjectives);
+    this.panel.update(this.config, result);
+    const assembly = resolveAssembly(this.config, catalog);
+    this.labelSource = { name: assembly.rocket.name, stages: assembly.rocket.stages.map((st) => ({ name: st.name, burn: st.burnSec })) };
+    this.buildLabels();
+    this.tutor?.refreshLocale();
   }
 
   private clearModels(): void {
@@ -290,7 +311,7 @@ export class DesignScene extends BaseScene {
     if (!layer || !rocket || !src) return;
     // Teks diperbesar = ruang tengah sempit: label dipersingkat tanpa durasi tahap.
     const compact = (Number(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1) > 1.15;
-    const stageTexts = src.stages.map((st) => (compact ? st.name : `${st.name} · ${st.burn} dtk`));
+    const stageTexts = src.stages.map((st) => (compact ? st.name : `${st.name} · ${st.burn} ${DESIGN.sec}`));
     const rocketName = src.name;
     layer.replaceChildren();
     this.labels = [];
@@ -307,7 +328,7 @@ export class DesignScene extends BaseScene {
       this.labels.push({ node: make(`${i + 1} · ${text}`, '', color), anchor: ring ?? rocket.stageGroups[i], lift: ring ? 0 : 3.5 });
     });
     this.labels.push({ node: make(rocketName, 'rocket-label'), anchor: rocket.root, lift: rocket.totalHeight + 1.2 });
-    this.landerLabel = { node: make('Wahana (lander)', 'lander-label'), anchor: rocket.root, lift: 0 };
+    this.landerLabel = { node: make(DESIGN.landerLabel, 'lander-label'), anchor: rocket.root, lift: 0 };
     if (this.refAstronaut) this.astronautLabel = { node: make(DESIGN.astronautScale, 'lander-label'), anchor: this.refAstronaut.root, lift: 1.9 };
   }
 

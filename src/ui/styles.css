@@ -1458,8 +1458,9 @@ button.dialog-next:active { transform: translateY(3px); box-shadow: 0 2px 0 #047
   transition: background 0.15s, border-color 0.15s;
 }
 .settings-step { min-width: 0; padding: 4px 9px; }
-.settings-switch[data-on='true'] { background: rgba(52, 211, 153, 0.18); border-color: #34d399; color: #6ee7b7; }
+.settings-switch[data-on='true'], .settings-lang[data-on='true'] { background: rgba(52, 211, 153, 0.18); border-color: #34d399; color: #6ee7b7; }
 .settings-switch[data-on='false'] { color: #fca5a5; border-color: rgba(248, 113, 113, 0.5); }
+.settings-lang[data-on='false'] { color: var(--ui-text-dim); border-color: rgba(148, 163, 184, 0.3); }
 .settings-switch:hover, .settings-step:hover { background: rgba(255, 255, 255, 0.12); }
 .settings-volume { width: 110px; accent-color: #38bdf8; cursor: pointer; }
 .settings-volume:disabled { opacity: 0.4; cursor: not-allowed; }

@@ -78,3 +78,6 @@ export interface MinigameResult { score01: number; durationSec: number }
 
 /** Mode permainan (PRD 11): cerita berurutan atau Free Design bebas tanpa cerita. */
 export type GameMode = 'story' | 'free';
+
+/** Bahasa antarmuka yang didukung game. */
+export type Lang = 'id' | 'en';

@@ -1,7 +1,8 @@
 import { audio } from '../core/audio';
 import { TEXT_SCALES } from '../core/constants';
-import { STORY_UI } from '../core/strings';
+import { setLang, STORY_UI } from '../core/strings';
 import type { DetailLevel } from '../gen/detail';
+import type { Lang } from '../rules/types';
 import { el } from './dom';
 
 export function applyTextScale(index: number): void {
@@ -9,10 +10,18 @@ export function applyTextScale(index: number): void {
   document.documentElement.style.setProperty('--ui-scale', String(scale));
 }
 
-export interface ControlsState { muted: boolean; volume: number; textScale: number; shadows: boolean; detail: DetailLevel; music: boolean }
+export interface ControlsState {
+  muted: boolean;
+  volume: number;
+  textScale: number;
+  shadows: boolean;
+  detail: DetailLevel;
+  music: boolean;
+  lang: Lang;
+}
 
 /**
- * Tombol roda gigi di kiri bawah yang membuka panel Pengaturan (suara, musik, volume, ukuran teks, bayangan, detail).
+ * Tombol roda gigi di kiri bawah yang membuka panel Pengaturan (suara, musik, volume, bahasa, ukuran teks, bayangan, detail).
  * `onChange` dipanggil setiap ada perubahan agar pilihan disimpan.
  */
 export function createSettings(
@@ -24,33 +33,36 @@ export function createSettings(
   let shadows = initial.shadows;
   let detail = initial.detail;
   let music = initial.music;
+  let lang: Lang = initial.lang;
   applyTextScale(textScale);
-  const emit = (): void => onChange({ muted: audio.isMuted, volume: audio.currentVolume, textScale, shadows, detail, music });
+  const emit = (): void => onChange({
+    muted: audio.isMuted, volume: audio.currentVolume, textScale, shadows, detail, music, lang,
+  });
 
   const root = el('div', 'settings');
   const toggle = el('button', 'settings-toggle');
   toggle.type = 'button';
-  toggle.title = STORY_UI.settings;
-  toggle.setAttribute('aria-label', STORY_UI.settings);
   toggle.setAttribute('aria-expanded', 'false');
   const panel = el('div', 'settings-panel');
   panel.hidden = true;
   panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', STORY_UI.settings);
 
   const head = el('div', 'settings-head');
+  const titleEl = el('h3', '', STORY_UI.settings);
   const close = el('button', 'settings-close', '×');
   close.type = 'button';
-  close.title = STORY_UI.close;
-  close.setAttribute('aria-label', STORY_UI.close);
-  head.append(el('h3', '', STORY_UI.settings), close);
+  head.append(titleEl, close);
 
-  const row = (label: string, ...controls: HTMLElement[]): HTMLDivElement => {
+  const row = (getLabel: () => string, ...controls: HTMLElement[]): { el: HTMLDivElement; update: () => void } => {
     const r = el('div', 'settings-row');
+    const lab = el('span', 'settings-label', getLabel());
     const c = el('div', 'settings-controls');
     c.append(...controls);
-    r.append(el('span', 'settings-label', label), c);
-    return r;
+    r.append(lab, c);
+    return {
+      el: r,
+      update: () => { lab.textContent = getLabel(); },
+    };
   };
   const switchButton = (onClick: () => void): HTMLButtonElement => {
     const b = el('button', 'settings-switch');
@@ -71,7 +83,6 @@ export function createSettings(
   slider.min = '0';
   slider.max = '100';
   slider.value = String(Math.round(initial.volume * 100));
-  slider.setAttribute('aria-label', STORY_UI.volume);
   const volumeValue = el('span', 'settings-value');
   slider.addEventListener('input', () => {
     audio.unlock();
@@ -80,43 +91,90 @@ export function createSettings(
     emit();
   });
 
+  const langIdBtn = el('button', 'settings-step settings-lang', STORY_UI.langId);
+  const langEnBtn = el('button', 'settings-step settings-lang', STORY_UI.langEn);
+  langIdBtn.type = langEnBtn.type = 'button';
+  langIdBtn.title = 'Bahasa Indonesia';
+  langEnBtn.title = 'English';
+  const selectLang = (next: Lang): void => {
+    if (lang === next) return;
+    lang = next;
+    setLang(lang);
+    refresh();
+    emit();
+  };
+  langIdBtn.addEventListener('click', () => selectLang('id'));
+  langEnBtn.addEventListener('click', () => selectLang('en'));
+
   const textValue = el('span', 'settings-value');
-  const textButton = (label: string, delta: number, title: string): HTMLButtonElement => {
+  const textButton = (label: string, delta: number, getTitle: () => string): { btn: HTMLButtonElement; update: () => void } => {
     const b = el('button', 'settings-step', label);
     b.type = 'button';
-    b.title = title;
+    b.title = getTitle();
     b.addEventListener('click', () => {
       textScale = Math.min(TEXT_SCALES.length - 1, Math.max(0, textScale + delta));
       applyTextScale(textScale);
       refresh();
       emit();
     });
-    return b;
+    return { btn: b, update: () => { b.title = getTitle(); } };
   };
+  const smallerBtn = textButton('A−', -1, () => STORY_UI.textSmaller);
+  const largerBtn = textButton('A+', 1, () => STORY_UI.textLarger);
   const shadowButton = switchButton(() => { shadows = !shadows; refresh(); });
   const detailButton = switchButton(() => { detail = detail === 'high' ? 'low' : 'high'; refresh(); });
-  detailButton.title = STORY_UI.detailTitle;
 
-  const refresh = (): void => {
+  const soundSection = el('h4', 'settings-section settings-section-sound', STORY_UI.sound);
+  const displaySection = el('h4', 'settings-section settings-section-display', STORY_UI.display);
+  const rows = [
+    row(() => STORY_UI.soundEffects, soundButton),
+    row(() => STORY_UI.music, musicButton),
+    row(() => STORY_UI.volume, slider, volumeValue),
+    row(() => STORY_UI.language, langIdBtn, langEnBtn),
+    row(() => STORY_UI.textSize, smallerBtn.btn, textValue, largerBtn.btn),
+    row(() => STORY_UI.shadows, shadowButton),
+    row(() => STORY_UI.detail, detailButton),
+  ];
+
+  function refresh(): void {
+    toggle.title = STORY_UI.settings;
+    toggle.setAttribute('aria-label', STORY_UI.settings);
+    panel.setAttribute('aria-label', STORY_UI.settings);
+    titleEl.textContent = STORY_UI.settings;
+    close.title = STORY_UI.close;
+    close.setAttribute('aria-label', STORY_UI.close);
+    soundSection.textContent = STORY_UI.sound;
+    displaySection.textContent = STORY_UI.display;
+    slider.setAttribute('aria-label', STORY_UI.volume);
+    smallerBtn.update();
+    largerBtn.update();
+    detailButton.title = STORY_UI.detailTitle;
+    rows.forEach((r) => r.update());
+
     setSwitch(soundButton, !audio.isMuted);
     setSwitch(musicButton, music);
     volumeValue.textContent = `${slider.value}%`;
     slider.disabled = audio.isMuted;
+    langIdBtn.textContent = STORY_UI.langId;
+    langEnBtn.textContent = STORY_UI.langEn;
+    setSwitch(langIdBtn, lang === 'id', STORY_UI.langId);
+    setSwitch(langEnBtn, lang === 'en', STORY_UI.langEn);
     textValue.textContent = `${Math.round(TEXT_SCALES[textScale] * 100)}%`;
     setSwitch(shadowButton, shadows);
     setSwitch(detailButton, detail === 'high', detail === 'high' ? STORY_UI.detailHigh : STORY_UI.detailLow);
-  };
+  }
 
   panel.append(
     head,
-    el('h4', 'settings-section settings-section-sound', STORY_UI.sound),
-    row(STORY_UI.soundEffects, soundButton),
-    row(STORY_UI.music, musicButton),
-    row(STORY_UI.volume, slider, volumeValue),
-    el('h4', 'settings-section settings-section-display', STORY_UI.display),
-    row(STORY_UI.textSize, textButton('A−', -1, STORY_UI.textSmaller), textValue, textButton('A+', 1, STORY_UI.textLarger)),
-    row(STORY_UI.shadows, shadowButton),
-    row(STORY_UI.detail, detailButton),
+    soundSection,
+    rows[0].el,
+    rows[1].el,
+    rows[2].el,
+    displaySection,
+    rows[3].el,
+    rows[4].el,
+    rows[5].el,
+    rows[6].el,
   );
 
   let isOpen = false;

@@ -16,6 +16,8 @@ export interface Minigame {
   start(ctx: MinigameContext): void;
   update(dtSec: number): void;
   result(): MinigameResult | null;
+  /** Segarkan teks UI bila bahasa berubah saat minigame aktif. */
+  refreshLocale?(): void;
   /** Bersihkan elemen DOM dan listener. */
   dispose(): void;
 }

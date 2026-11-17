@@ -14,8 +14,8 @@ const ORIGIN_Y = (CANVAS_H - CELL * P.rows) / 2;
 /** Bersihkan Panel: gosok debu statis dari panel surya dengan kuas (event debu di Bulan). */
 export class CleanPanel extends BaseMinigame {
   readonly id = 'clean_panel';
-  readonly title = MINIGAME_UI.panel.title;
-  readonly hint = MINIGAME_UI.panel.hint;
+  get title(): string { return MINIGAME_UI.panel.title; }
+  get hint(): string { return MINIGAME_UI.panel.hint; }
   get durationSec(): number { return P.timeLimitSec; }
 
   private panelState!: PanelDust;

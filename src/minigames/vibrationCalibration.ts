@@ -16,8 +16,8 @@ const NOMINAL_SEC = R.firstBeatSec + ((R.beats - 1) * (R.intervalMin + R.interva
 /** Kalibrasi Getaran: ketuk tepat saat puncak gelombang seismik melewati garis bidik. */
 export class VibrationCalibration extends BaseMinigame {
   readonly id = 'vibration_calibration';
-  readonly title = MINIGAME_UI.rhythm.title;
-  readonly hint = MINIGAME_UI.rhythm.hint;
+  get title(): string { return MINIGAME_UI.rhythm.title; }
+  get hint(): string { return MINIGAME_UI.rhythm.hint; }
   get durationSec(): number { return this.beats.length > 0 ? rhythmDurationSec(this.beats) : NOMINAL_SEC; }
 
   private beats: number[] = [];

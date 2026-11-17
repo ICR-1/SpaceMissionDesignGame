@@ -1,7 +1,7 @@
 import { JOURNAL_UI, SURFACE_UI } from '../core/strings';
 import type { ChoiceOutcome } from '../events/eventSystem';
 import type { GameEvent } from '../rules/types';
-import { showEventDialog } from './dialog';
+import { showEventDialog, type EventDialog } from './dialog';
 import { Cinematic } from './cinematic';
 import { clear, el } from './dom';
 import { renderKeyHints } from './keyHints';
@@ -45,7 +45,7 @@ export interface SurfaceHudView {
   scannerReady: boolean;
 }
 
-interface Meter { row: HTMLElement; fill: HTMLElement; value: HTMLElement; icon: HTMLElement }
+interface Meter { row: HTMLElement; fill: HTMLElement; value: HTMLElement; icon: HTMLElement; label: HTMLElement }
 
 const fmt = (sec: number): string => {
   const s = Math.max(0, Math.floor(sec));
@@ -65,7 +65,7 @@ export class SurfaceHud {
   private readonly compass = el('div', 'compass');
   private readonly compassStrip = el('div', 'compass-strip');
   private readonly compassMarks = el('div', 'compass-marks');
-  private readonly scaleTicks: { node: HTMLElement; offset: number }[] = [];
+  private readonly scaleTicks: { node: HTMLElement; offset: number; deg: number }[] = [];
   private readonly hubTick = el('div', 'compass-mark hub');
   private readonly poiTicks: HTMLElement[] = [];
   private readonly objectivePanel = el('div', 'hud-panel hud-right objective-panel');
@@ -78,6 +78,8 @@ export class SurfaceHud {
   private readonly scanner = el('div', 'scanner-chip');
   private readonly staticFx = el('div', 'static-fx');
   private modal = false;
+  private uplinkOpen: { onYes: () => void; onNo: () => void } | null = null;
+  private activeEvent: { id: string; dialog: EventDialog } | null = null;
   private readonly journal = el('div', 'hud-panel journal-panel');
 
   constructor(ui: HTMLElement, poiCount: number) {
@@ -95,7 +97,7 @@ export class SurfaceHud {
       const major = deg % 90 === 0;
       const node = el('div', label === undefined || deg % 45 !== 0 ? 'compass-scale' : major ? 'compass-scale cardinal major' : 'compass-scale cardinal');
       if (label !== undefined && deg % 45 === 0) node.textContent = label;
-      this.scaleTicks.push({ node, offset: (deg * Math.PI) / 180 });
+      this.scaleTicks.push({ node, offset: (deg * Math.PI) / 180, deg });
       this.compassStrip.appendChild(node);
     }
     this.compassMarks.appendChild(this.hubTick);
@@ -113,6 +115,24 @@ export class SurfaceHud {
     ui.appendChild(this.root);
   }
 
+  refreshLocale(findEvent?: (id: string) => GameEvent | undefined): void {
+    this.meters.oxygen.label.textContent = SURFACE_UI.meters.oxygen;
+    this.meters.suit.label.textContent = SURFACE_UI.meters.suit;
+    this.meters.vehicle.label.textContent = SURFACE_UI.meters.vehicle;
+    this.meters.signal.label.textContent = SURFACE_UI.meters.signal;
+    for (const t of this.scaleTicks) {
+      if (t.deg % 45 === 0) t.node.textContent = SURFACE_UI.cardinals[t.deg / 45] ?? '';
+    }
+    if (this.uplinkOpen) {
+      const { onYes, onNo } = this.uplinkOpen;
+      this.confirmUplink(onYes, onNo);
+    }
+    if (this.activeEvent && findEvent) {
+      const ev = findEvent(this.activeEvent.id);
+      if (ev) this.activeEvent.dialog.refreshLocale(ev);
+    }
+  }
+
   private makeMeter(label: string, term?: 'signal'): Meter {
     const row = el('div', 'meter');
     const icon = el('span', 'meter-icon', '●');
@@ -123,7 +143,7 @@ export class SurfaceHud {
     const lab = el('span', 'meter-label', label);
     if (term) attachTooltip(lab, term);
     row.append(icon, lab, bar, value);
-    return { row, fill, value, icon };
+    return { row, fill, value, icon, label: lab };
   }
 
   setObjectives(list: ObjectiveView[]): void {
@@ -151,13 +171,13 @@ export class SurfaceHud {
   update(v: SurfaceHudView): void {
     this.setMeter(this.meters.oxygen, v.oxygen / 100, `${v.oxygen.toFixed(0)}%`);
     this.setMeter(this.meters.suit, v.suit / 100, `${v.suit.toFixed(0)}%`);
-    this.setMeter(this.meters.vehicle, v.vehiclePct / 100, v.powerOut ? 'HABIS' : `${v.vehiclePct.toFixed(0)}%`);
+    this.setMeter(this.meters.vehicle, v.vehiclePct / 100, v.powerOut ? SURFACE_UI.empty : `${v.vehiclePct.toFixed(0)}%`);
     this.setMeter(this.meters.signal, v.signal01, `${(v.signal01 * 100).toFixed(0)}%`);
     this.staticFx.classList.toggle('on', v.signal01 < 0.5);
 
     this.clock.textContent = `${v.day ? SURFACE_UI.day : SURFACE_UI.night} · ${fmt(v.elapsedSec)} · ${SURFACE_UI.remaining} ${fmt(v.remainingSec)}`;
     this.clock.dataset.day = String(v.day);
-    renderKeyHints(this.scanner, `${SURFACE_UI.scanner}: ${v.scannerReady ? 'siap' : SURFACE_UI.scannerCooling}`);
+    renderKeyHints(this.scanner, `${SURFACE_UI.scanner}: ${v.scannerReady ? SURFACE_UI.scannerReady : SURFACE_UI.scannerCooling}`);
 
     const toLeft = (bearing: number): number => 50 + (bearing / COMPASS_HALF_RAD) * 50;
     for (const t of this.scaleTicks) {
@@ -241,7 +261,8 @@ export class SurfaceHud {
     const no = el('button', 'choice', U.no);
     yes.type = no.type = 'button';
     this.modal = true;
-    const close = (fn: () => void) => () => { clear(this.dialogHost); this.modal = false; fn(); };
+    this.uplinkOpen = { onYes, onNo };
+    const close = (fn: () => void) => () => { clear(this.dialogHost); this.modal = false; this.uplinkOpen = null; fn(); };
     yes.addEventListener('click', close(onYes));
     no.addEventListener('click', close(onNo));
     box.append(el('div', 'dialog-name', U.title), el('p', 'dialog-text', U.body), yes, no);
@@ -260,7 +281,18 @@ export class SurfaceHud {
     runMinigame?: (minigameId: string) => Promise<number>,
   ): void {
     this.modal = true;
-    showEventDialog(this.dialogHost, event, resolve, (outcome) => { this.modal = false; onClose(outcome); }, runMinigame);
+    const dialog = showEventDialog(
+      this.dialogHost,
+      event,
+      resolve,
+      (outcome) => {
+        this.modal = false;
+        this.activeEvent = null;
+        onClose(outcome);
+      },
+      runMinigame,
+    );
+    this.activeEvent = { id: event.id, dialog };
   }
 
   flash(): void {

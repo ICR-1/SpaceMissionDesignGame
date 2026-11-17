@@ -9,8 +9,12 @@ import { createPortrait } from './dialog';
 import { el } from './dom';
 import { renderKeyHints } from './keyHints';
 
+export interface TutorOfferHandle {
+  refreshLocale(): void;
+}
+
 /** Menawarkan Tur Pengenalan interaktif kepada pemain baru sebelum memulai misi Bulan pertama. */
-export function showTutorOffer(host: HTMLElement, onStart: () => void, onSkip: () => void): void {
+export function showTutorOffer(host: HTMLElement, onStart: () => void, onSkip: () => void): TutorOfferHandle {
   const card = el('div', 'dialog modal tutor-offer');
   card.dataset.speaker = 'sekar';
   card.dataset.interactive = 'true';
@@ -19,35 +23,51 @@ export function showTutorOffer(host: HTMLElement, onStart: () => void, onSkip: (
   const portraitBox = el('div', 'portrait-box');
   portraitBox.appendChild(createPortrait('sekar'));
   const titleWrap = el('div', 'tutor-offer-titles');
-  titleWrap.append(el('h3', 'tutor-offer-title', TUTOR_UI.offerTitle), el('p', 'tutor-offer-sub', TUTOR_UI.offerSubtitle));
+  const titleEl = el('h3', 'tutor-offer-title', TUTOR_UI.offerTitle);
+  const subEl = el('p', 'tutor-offer-sub', TUTOR_UI.offerSubtitle);
+  titleWrap.append(titleEl, subEl);
   head.append(portraitBox, titleWrap);
 
   const list = el('ul', 'tutor-offer-list');
-  for (const point of TUTOR_UI.offerPoints) list.appendChild(el('li', '', point));
+  const renderList = (): void => {
+    list.replaceChildren(...TUTOR_UI.offerPoints.map((point) => el('li', '', point)));
+  };
+  renderList();
 
   const actions = el('div', 'tutor-offer-actions');
   const startBtn = el('button', 'launch-button', TUTOR_UI.offerStart);
   const skipBtn = el('button', 'choice tutor-skip-btn', TUTOR_UI.offerSkip);
   startBtn.type = skipBtn.type = 'button';
+  let closed = false;
   startBtn.addEventListener('click', () => {
+    closed = true;
     card.remove();
     onStart();
   });
   skipBtn.addEventListener('click', () => {
+    closed = true;
     card.remove();
     onSkip();
   });
   actions.append(startBtn, skipBtn);
 
-  card.append(
-    el('div', 'dialog-name', SPEAKER_NAMES.sekar),
-    head,
-    el('p', 'dialog-text', TUTOR_UI.offerBody),
-    list,
-    actions,
-  );
+  const speakerEl = el('div', 'dialog-name', SPEAKER_NAMES.sekar);
+  const bodyEl = el('p', 'dialog-text', TUTOR_UI.offerBody);
+  card.append(speakerEl, head, bodyEl, list, actions);
   host.appendChild(card);
   startBtn.focus();
+  return {
+    refreshLocale: () => {
+      if (closed) return;
+      speakerEl.textContent = SPEAKER_NAMES.sekar;
+      titleEl.textContent = TUTOR_UI.offerTitle;
+      subEl.textContent = TUTOR_UI.offerSubtitle;
+      bodyEl.textContent = TUTOR_UI.offerBody;
+      renderList();
+      startBtn.textContent = TUTOR_UI.offerStart;
+      skipBtn.textContent = TUTOR_UI.offerSkip;
+    },
+  };
 }
 
 export interface TutorGuideOptions {
@@ -60,6 +80,7 @@ export interface TutorGuideOptions {
  */
 export class TutorGuide {
   private readonly card: HTMLElement;
+  private readonly badgeEl: HTMLElement;
   private readonly progressEl: HTMLElement;
   private readonly portraitBox: HTMLElement;
   private readonly speakerEl: HTMLElement;
@@ -82,11 +103,12 @@ export class TutorGuide {
     this.card.hidden = true;
 
     const top = el('div', 'tutor-top');
+    this.badgeEl = el('span', 'tutor-badge', TUTOR_UI.badge);
     this.progressEl = el('span', 'tutor-progress');
     this.skipBtn = el('button', 'tutor-skip', TUTOR_UI.skip);
     this.skipBtn.type = 'button';
     this.skipBtn.addEventListener('click', () => this.finishTutor());
-    top.append(el('span', 'tutor-badge', TUTOR_UI.badge), this.progressEl, this.skipBtn);
+    top.append(this.badgeEl, this.progressEl, this.skipBtn);
 
     const content = el('div', 'tutor-content');
     this.portraitBox = el('div', 'portrait-box tutor-portrait');
@@ -108,6 +130,13 @@ export class TutorGuide {
 
   isVisible(): boolean {
     return this.visible;
+  }
+
+  refreshLocale(): void {
+    this.badgeEl.textContent = TUTOR_UI.badge;
+    this.skipBtn.textContent = TUTOR_UI.skip;
+    this.waitEl.textContent = TUTOR_UI.waitingLaunch;
+    this.sync();
   }
 
   /** Memastikan state tur mengikuti scene dan fase penerbangan saat ini lalu memperbarui DOM. */

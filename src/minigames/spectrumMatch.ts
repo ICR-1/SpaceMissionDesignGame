@@ -13,8 +13,8 @@ const PLOT = { x: 20, y: 20, w: CANVAS_W - 40, h: CANVAS_H - 50 };
 /** Cocokkan Spektrum: geser dan skalakan kurva absorpsi sampai menimpa kurva mineral referensi. */
 export class SpectrumMatch extends BaseMinigame {
   readonly id = 'spectrum_match';
-  readonly title = MINIGAME_UI.spectrum.title;
-  readonly hint = MINIGAME_UI.spectrum.hint;
+  get title(): string { return MINIGAME_UI.spectrum.title; }
+  get hint(): string { return MINIGAME_UI.spectrum.hint; }
   get durationSec(): number { return S.timeLimitSec; }
 
   private puzzle!: SpectrumPuzzle;
@@ -23,6 +23,10 @@ export class SpectrumMatch extends BaseMinigame {
   private shiftInput!: HTMLInputElement;
   private scaleInput!: HTMLInputElement;
   private matchFill!: HTMLElement;
+  private shiftLabel!: HTMLElement;
+  private scaleLabel!: HTMLElement;
+  private matchLabel!: HTMLElement;
+  private lockBtn!: HTMLButtonElement;
 
   protected onStart(): void {
     this.puzzle = generateSpectrum(this.rng, this.difficulty);
@@ -37,12 +41,23 @@ export class SpectrumMatch extends BaseMinigame {
     const match = el('div', 'minigame-match');
     this.matchFill = el('div', 'minigame-match-fill');
     match.appendChild(this.matchFill);
-    const lock = el('button', 'launch-button', MINIGAME_UI.spectrum.lock);
-    lock.type = 'button';
-    lock.addEventListener('click', () => this.lock());
-    controls.append(el('span', '', MINIGAME_UI.spectrum.shift), this.shiftInput, el('span', '', MINIGAME_UI.spectrum.scale), this.scaleInput, el('span', '', MINIGAME_UI.spectrum.match), match);
+    this.lockBtn = el('button', 'launch-button', MINIGAME_UI.spectrum.lock);
+    this.lockBtn.type = 'button';
+    this.lockBtn.addEventListener('click', () => this.lock());
+    this.shiftLabel = el('span', '', MINIGAME_UI.spectrum.shift);
+    this.scaleLabel = el('span', '', MINIGAME_UI.spectrum.scale);
+    this.matchLabel = el('span', '', MINIGAME_UI.spectrum.match);
+    controls.append(this.shiftLabel, this.shiftInput, this.scaleLabel, this.scaleInput, this.matchLabel, match);
     this.panel.body.insertBefore(controls, this.panel.status);
-    this.panel.body.insertBefore(lock, this.panel.status);
+    this.panel.body.insertBefore(this.lockBtn, this.panel.status);
+  }
+
+  protected override onRefreshLocale(): void {
+    if (!this.lockBtn) return;
+    this.shiftLabel.textContent = MINIGAME_UI.spectrum.shift;
+    this.scaleLabel.textContent = MINIGAME_UI.spectrum.scale;
+    this.matchLabel.textContent = MINIGAME_UI.spectrum.match;
+    this.lockBtn.textContent = MINIGAME_UI.spectrum.lock;
   }
 
   private slider(min: number, max: number, step: number, value: number): HTMLInputElement {

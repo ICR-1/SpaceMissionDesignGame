@@ -2,20 +2,20 @@ import * as THREE from 'three';
 import { CAMERA_FOV } from '../core/constants';
 import type { GameContext } from '../core/context';
 import { defaultMission, setDestination } from '../core/missionBuilder';
-import { STORY_UI, TITLE_UI, TUTOR_UI } from '../core/strings';
+import { STORY_UI, TITLE_UI, TUTOR_UI, LOADING_UI } from '../core/strings';
 import { linesFor } from '../rules/dialogs';
 import { modeRules, selectableDestinationIds, suggestedDestinationIndex } from '../rules/progress';
 import { shouldOfferTutor, startTutor, stopTutor } from '../rules/tutor';
-import type { Destination, Id } from '../rules/types';
+import type { Destination, DialogLine, Id } from '../rules/types';
 import { Orrery } from '../gen/orrery';
 import { carouselFrame, focusForDestination, type OrreryFocus } from '../gen/solarSystemData';
-import { showDialogSequence } from '../ui/dialog';
+import { showDialogSequence, type DialogSequence } from '../ui/dialog';
 import { el } from '../ui/dom';
 import { renderKeyHints } from '../ui/keyHints';
 import { createLogo } from '../ui/logo';
 import { attachTooltip } from '../ui/tooltip';
 import type { GlossaryKey } from '../ui/tooltip';
-import { showTutorOffer } from '../ui/tutorOverlay';
+import { showTutorOffer, type TutorOfferHandle } from '../ui/tutorOverlay';
 import { nudgeApart, type LabelBox } from '../ui/labelLayout';
 import { BaseScene } from './baseScene';
 
@@ -69,6 +69,8 @@ export class BriefingScene extends BaseScene {
   /** Tombol menu utama dan indeks yang sedang disorot (panah/hover/Tab memindahkan sorotan yang sama). */
   private titleButtons: HTMLButtonElement[] = [];
   private titleSel = 0;
+  private activeDialog: { getLines: () => DialogLine[]; seq: DialogSequence } | null = null;
+  private activeTutorOffer: TutorOfferHandle | null = null;
   private loadPromise: Promise<void> = Promise.resolve();
 
   constructor(ctx: GameContext) {
@@ -124,11 +126,14 @@ export class BriefingScene extends BaseScene {
     const { save, mode } = this.ctx.store.get();
     if (!save.introSeen && modeRules(mode).storyDialogs) {
       this.busy = true;
-      showDialogSequence(ui, linesFor(this.ctx.catalog.dialogs, 'intro'), () => {
+      const getLines = (): DialogLine[] => linesFor(this.ctx.catalog.dialogs, 'intro');
+      const seq = showDialogSequence(ui, getLines(), () => {
+        this.activeDialog = null;
         this.ctx.store.set({ save: { ...this.ctx.store.get().save, introSeen: true } });
         this.busy = false;
         this.renderMenu(ui);
       });
+      this.activeDialog = { getLines, seq };
     } else this.renderMenu(ui);
   }
 
@@ -236,11 +241,53 @@ export class BriefingScene extends BaseScene {
     this.title = null;
     this.titleButtons = [];
     this.menu = null;
+    this.activeDialog = null;
+    this.activeTutorOffer = null;
     this.orrery?.dispose();
     this.orrery = null;
     this.labelLayer = null;
     this.labelNodes.clear();
     this.labelSize.clear();
+  }
+
+  onLanguageChange(): void {
+    if (this.orrery) {
+      for (const l of this.orrery.labels) {
+        const node = this.labelNodes.get(l.key);
+        if (node) node.textContent = LOADING_UI.planets[l.key] ?? l.name;
+      }
+      this.labelSize.clear();
+    }
+    if (this.title) {
+      const s = this.title;
+      s.querySelector('.title-logo')?.setAttribute('aria-label', TITLE_UI.logo);
+      const sub = s.querySelector('.title-subtitle');
+      if (sub) sub.textContent = TITLE_UI.subtitle;
+      const tag = s.querySelector('.title-tagline');
+      if (tag) tag.textContent = TITLE_UI.tagline;
+      const play = s.querySelector('.title-play');
+      if (play) play.textContent = TITLE_UI.play;
+      const settings = s.querySelector('.title-settings');
+      if (settings) settings.textContent = TITLE_UI.settings;
+      const info = s.querySelector('.title-info');
+      if (info) info.textContent = TITLE_UI.about;
+      const keys = s.querySelector<HTMLElement>('.title-keys');
+      if (keys) renderKeyHints(keys, TITLE_UI.keys);
+      const credit = s.querySelector('.title-credit');
+      if (credit) credit.textContent = TITLE_UI.credit;
+      const about = s.querySelector('.title-about');
+      if (about) {
+        about.remove();
+        this.showAbout(s);
+      }
+    }
+    if (this.menu && this.ui && !this.busy) {
+      this.renderMenu(this.ui);
+    }
+    if (this.activeDialog) {
+      this.activeDialog.seq.refreshLocale(this.activeDialog.getLines());
+    }
+    this.activeTutorOffer?.refreshLocale();
   }
 
   /** Buat label DOM untuk planet yang sudah siap (nama saja; tanpa fakta sains tambahan). */
@@ -249,7 +296,7 @@ export class BriefingScene extends BaseScene {
     if (!layer || !this.orrery) return;
     for (const l of this.orrery.labels) {
       if (this.labelNodes.has(l.key)) continue;
-      const node = el('div', 'stage-label planet-label', l.name);
+      const node = el('div', 'stage-label planet-label', LOADING_UI.planets[l.key] ?? l.name);
       layer.appendChild(node);
       this.labelNodes.set(l.key, node);
       const w = node.offsetWidth, h = node.offsetHeight;
@@ -326,7 +373,8 @@ export class BriefingScene extends BaseScene {
     modeRow.append(tabs, tutorBtn);
     top.append(modeRow, el('p', 'mode-hint', rules.storyDialogs ? STORY_UI.modeStoryHint : STORY_UI.modeFreeHint));
     if (rules.recordsProgress) {
-      const beacons = save.beacons.length > 0 ? save.beacons.map((b) => b.replace('beacon_', '')).join(', ') : STORY_UI.none;
+      const destName = (id: string): string => this.ctx.catalog.destinations.find((d) => d.id === id)?.name ?? id;
+      const beacons = save.beacons.length > 0 ? save.beacons.map((b) => destName(b.replace('beacon_', ''))).join(', ') : STORY_UI.none;
       top.appendChild(el('div', 'progress-line', `${STORY_UI.progress}: ${STORY_UI.sciencePoints} ${save.sciencePoints} · ${STORY_UI.beacons}: ${beacons}`));
     }
 
@@ -444,20 +492,26 @@ export class BriefingScene extends BaseScene {
       this.ctx.go('design');
       return;
     }
-    const dialogs = this.ctx.catalog.dialogs;
-    const lines = [...linesFor(dialogs, `briefing_${destinationId}`)];
     const save = this.ctx.store.get().save;
     const offerTutor = shouldOfferTutor(save, this.ctx.store.get().mode, destinationId);
-    if (!save.tutorialSeen && !offerTutor) lines.push(...linesFor(dialogs, 'tutorial'));
-    showDialogSequence(ui, lines, () => {
+    const getLines = (): DialogLine[] => {
+      const dialogs = this.ctx.catalog.dialogs;
+      const out = [...linesFor(dialogs, `briefing_${destinationId}`)];
+      if (!save.tutorialSeen && !offerTutor) out.push(...linesFor(dialogs, 'tutorial'));
+      return out;
+    };
+    const seq = showDialogSequence(ui, getLines(), () => {
+      this.activeDialog = null;
       if (offerTutor) {
-        showTutorOffer(
+        this.activeTutorOffer = showTutorOffer(
           ui,
           () => {
+            this.activeTutorOffer = null;
             this.busy = false;
             this.launchTutor();
           },
           () => {
+            this.activeTutorOffer = null;
             this.ctx.store.set({
               save: { ...this.ctx.store.get().save, tutorialSeen: true },
               tutor: stopTutor(),
@@ -472,6 +526,7 @@ export class BriefingScene extends BaseScene {
       this.busy = false;
       this.ctx.go('design');
     });
+    this.activeDialog = { getLines, seq };
   }
 
   /** Tombol karusel: panah/A-D ganti tujuan, Enter mulai. Penekanan selama dialog dibuang. */

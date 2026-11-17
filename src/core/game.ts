@@ -15,7 +15,8 @@ import { AdaptiveQuality } from './quality';
 import { browserStorage, loadSave, writeSave } from './save';
 import { createGameStore, type Store, type GameState } from './store';
 import { createSettings } from '../ui/settings';
-import { STRINGS } from './strings';
+import { localizedCatalog } from './catalogEn';
+import { getLang, setLang, STRINGS } from './strings';
 import { buildPreloadSteps, nextFrame, runPreload } from './preload';
 import { LoadingScreen } from '../ui/loading';
 import { createBriefingScene } from '../scenes/briefing';
@@ -55,12 +56,17 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.applyShadows(this.store.get().save.shadows);
     setDetail(this.store.get().save.detail);
+    setLang(this.store.get().save.lang);
+    document.documentElement.lang = this.store.get().save.lang;
     this.quality = new AdaptiveQuality(baseRatio);
     const overlay = document.getElementById('overlay');
     if (!overlay) throw new Error('Elemen #overlay tidak ditemukan');
+    const baseCatalog = loadCatalog();
     const ctx: GameContext = {
       renderer: this.renderer, canvas, overlay, store: this.store, input: this.input,
-      cursor: this.cursor, catalog: loadCatalog(), go: (id) => {
+      cursor: this.cursor,
+      get catalog() { return localizedCatalog(baseCatalog, getLang()); },
+      go: (id) => {
         this.cursor.prepareSceneChange(id);
         this.transition.request(id);
       },
@@ -161,12 +167,22 @@ export class Game {
     this.store.subscribe((state, prev) => {
       if (state.save !== prev.save) writeSave(this.storage, state.save);
     });
-    this.controls = createSettings(overlay, save, ({ muted, volume, textScale, shadows, detail, music }) => {
+    this.controls = createSettings(overlay, save, ({ muted, volume, textScale, shadows, detail, music, lang }) => {
+      const prev = this.store.get().save;
+      const langChanged = lang !== prev.lang;
       this.applyShadows(shadows);
       const changed = detail !== getDetail();
       setDetail(detail);
       audio.setMusicEnabled(music);
-      this.store.set({ save: { ...this.store.get().save, muted, volume, textScale, shadows, detail, music } });
+      if (langChanged) {
+        setLang(lang);
+        document.documentElement.lang = lang;
+      }
+      this.store.set({ save: { ...prev, muted, volume, textScale, shadows, detail, music, lang } });
+      if (langChanged) {
+        this.updateLabel(this.store.get().currentScene);
+        this.scenes.refreshLanguage();
+      }
       // Scene statis dibangun ulang segera; flight/surface memakai detail baru saat dimasuki berikutnya (state misi tidak direset).
       if (changed && ['briefing', 'design'].includes(this.store.get().currentScene)) this.scenes.reload();
     });
@@ -208,7 +224,7 @@ export class Game {
     if (this.perf && this.perfClock > 0.5) {
       this.perfClock = 0;
       const info = this.renderer.info.render;
-      this.perf.textContent = `${this.fpsEma.toFixed(0)} FPS · render ${(this.quality.current).toFixed(2)}x · ${info.triangles} segitiga · ${info.calls} draw call`;
+      this.perf.textContent = `${this.fpsEma.toFixed(0)} FPS · render ${(this.quality.current).toFixed(2)}x · ${info.triangles} ${STRINGS.perfTriangles} · ${info.calls} ${STRINGS.perfCalls}`;
     }
   }
 

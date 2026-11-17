@@ -12,22 +12,22 @@ import type { GlossaryKey } from './tooltip';
 
 const SPEED_BAR_MAX = 20;
 
-const SAS_OPTIONS: { mode: SasMode; label: string; title: string }[] = [
-  { mode: 'ascent', label: 'ASC', title: 'Ascent Guidance (Gravity Turn Otomatis)' },
-  { mode: 'stability', label: 'STAB', title: 'Stability Assist' },
-  { mode: 'prograde', label: 'PRO', title: 'Kunci Prograde' },
-  { mode: 'retrograde', label: 'RET', title: 'Kunci Retrograde' },
-  { mode: 'normal', label: 'NRM', title: 'Kunci Normal' },
-  { mode: 'antiNormal', label: 'ANM', title: 'Kunci Anti-Normal' },
-  { mode: 'maneuver', label: 'TGT', title: 'Kunci Target Manuver' },
-  { mode: 'off', label: 'OFF', title: 'SAS Nonaktif' },
+const SAS_OPTIONS: { mode: SasMode; label: string }[] = [
+  { mode: 'ascent', label: 'ASC' },
+  { mode: 'stability', label: 'STAB' },
+  { mode: 'prograde', label: 'PRO' },
+  { mode: 'retrograde', label: 'RET' },
+  { mode: 'normal', label: 'NRM' },
+  { mode: 'antiNormal', label: 'ANM' },
+  { mode: 'maneuver', label: 'TGT' },
+  { mode: 'off', label: 'OFF' },
 ];
 
 interface StageRow { row: HTMLElement; fill: HTMLElement }
 
 function formatDist(m: number): string {
   const abs = Math.abs(m);
-  if (abs >= 1e9) return `${(m / 1e9).toFixed(2)} jt km`;
+  if (abs >= 1e9) return `${(m / 1e9).toFixed(2)} ${FLIGHT_UI.units.millionKm}`;
   if (abs >= 1e6) return `${(m / 1e3).toFixed(0)} km`;
   if (abs >= 10_000) return `${(m / 1e3).toFixed(1)} km`;
   return `${m.toFixed(0)} m`;
@@ -36,8 +36,9 @@ function formatDist(m: number): string {
 function formatTimeShort(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '-';
   const s = Math.round(sec);
-  if (s >= 86400) return `${Math.floor(s / 86400)}h ${Math.floor((s % 86400) / 3600)}j`;
-  if (s >= 3600) return `${Math.floor(s / 3600)}j ${Math.floor((s % 3600) / 60)}m`;
+  const U = FLIGHT_UI.units;
+  if (s >= 86400) return `${Math.floor(s / 86400)}${U.dayShort} ${Math.floor((s % 86400) / 3600)}${U.hourShort}`;
+  if (s >= 3600) return `${Math.floor(s / 3600)}${U.hourShort} ${Math.floor((s % 3600) / 60)}${U.minShort}`;
   const m = Math.floor(s / 60);
   const rem = s % 60;
   return `${m}:${String(rem).padStart(2, '0')}`;
@@ -59,18 +60,20 @@ export class FlightHud {
   private readonly throttleFill = el('div', 'bar-fill');
   private readonly speedGauge = el('div', 'gauge gauge-speed');
   private readonly speedPointer = el('div', 'speed-pointer');
-  private readonly cushionBadge = el('div', 'cushion-badge', 'BANTUAN PENDARATAN AKTIF (< 2 m/s)');
+  private readonly cushionBadge = el('div', 'cushion-badge', FLIGHT_UI.cushionBadge);
   private readonly result = el('div', 'result-panel');
   private readonly navball = new NavballWidget(132);
   private readonly navReadout = el('div', 'nav-readout');
   private readonly sasButtons = new Map<SasMode, HTMLElement>();
   private readonly warpButtons: HTMLButtonElement[] = [];
   private readonly warpTargetBtn = document.createElement('button');
+  private readonly localizers: (() => void)[] = [];
   private pendingWarpIndex: number | undefined;
   private pendingWarpToTarget = false;
   private lastFuelStart = 0;
+  private lastResult: { summary: FlightSummary; onContinue: () => void; instrumentName?: (id: string) => string } | null = null;
 
-  constructor(ui: HTMLElement, private readonly rocket: Rocket) {
+  constructor(ui: HTMLElement, private rocket: Rocket) {
     const root = el('div', 'flight-hud');
     root.append(this.buildTop(), this.buildStages(), this.buildTelemetry(), this.buildBottom(), this.result);
     ui.appendChild(root);
@@ -89,11 +92,19 @@ export class FlightHud {
     return val;
   }
 
+  refreshLocale(rocket: Rocket, instrumentName?: (id: string) => string): void {
+    this.rocket = rocket;
+    for (const fn of this.localizers) fn();
+    if (this.lastResult && !this.result.hidden) {
+      this.showResult(this.lastResult.summary, this.lastResult.onContinue, instrumentName ?? this.lastResult.instrumentName);
+    }
+  }
+
   private buildTop(): HTMLElement {
     const top = el('div', 'hud-top');
     const bar = el('div', 'hud-top-bar');
     const warpWrap = el('div', 'warp-bar');
-    warpWrap.title = `${FLIGHT_UI.telemetry.warp} ([.] / [,])`;
+    this.localizers.push(() => { warpWrap.title = `${FLIGHT_UI.telemetry.warp} ([.] / [,])`; });
     ORBITAL.warpSteps.forEach((w, i) => {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -105,22 +116,31 @@ export class FlightHud {
     });
     this.warpTargetBtn.type = 'button';
     this.warpTargetBtn.className = 'warp-btn warp-target-btn';
-    this.warpTargetBtn.textContent = FLIGHT_UI.telemetry.warpToTarget;
+    this.localizers.push(() => { this.warpTargetBtn.textContent = FLIGHT_UI.telemetry.warpToTarget; });
     this.warpTargetBtn.hidden = true;
     this.warpTargetBtn.addEventListener('click', () => { this.pendingWarpToTarget = true; });
     bar.append(this.phase, warpWrap, this.warpTargetBtn);
     top.append(bar, this.message);
+    for (const fn of this.localizers.slice(-2)) fn();
     return top;
   }
 
   private buildStages(): HTMLElement {
     const panel = el('div', 'hud-panel hud-left');
     const lander = el('div', 'stage-row lander-row');
-    lander.append(el('span', 'stage-name', FLIGHT_UI.lander));
+    const landerName = el('span', 'stage-name', FLIGHT_UI.lander);
+    this.localizers.push(() => { landerName.textContent = FLIGHT_UI.lander; });
+    lander.append(landerName);
     panel.appendChild(lander);
     for (let i = this.rocket.stages.length - 1; i >= 0; i--) {
       const row = el('div', 'stage-row');
-      row.append(el('span', 'stage-name', `${FLIGHT_UI.stage} ${i + 1}`), el('span', 'stage-sub', this.rocket.stages[i].name));
+      const stageName = el('span', 'stage-name', `${FLIGHT_UI.stage} ${i + 1}`);
+      const stageSub = el('span', 'stage-sub', this.rocket.stages[i].name);
+      this.localizers.push(() => {
+        stageName.textContent = `${FLIGHT_UI.stage} ${i + 1}`;
+        stageSub.textContent = this.rocket.stages[i]?.name ?? '';
+      });
+      row.append(stageName, stageSub);
       const bar = el('div', 'bar');
       const fill = el('div', 'bar-fill');
       bar.appendChild(fill);
@@ -128,16 +148,16 @@ export class FlightHud {
       panel.appendChild(row);
       this.stageRows[i] = { row, fill };
     }
-    const t = FLIGHT_UI.telemetry;
-    this.line(panel, 'dist', t.distance);
-    this.line(panel, 'burn', t.burnTime);
+    this.line(panel, 'dist', () => FLIGHT_UI.telemetry.distance);
+    this.line(panel, 'burn', () => FLIGHT_UI.telemetry.burnTime);
     return panel;
   }
 
-  private line(panel: HTMLElement, key: string, label: string, term?: GlossaryKey): void {
+  private line(panel: HTMLElement, key: string, getLabel: () => string, term?: GlossaryKey): void {
     const row = el('div', 'tele-row');
     const value = el('span', 'tele-value', '-');
-    const lab = el('span', 'tele-label', label);
+    const lab = el('span', 'tele-label', getLabel());
+    this.localizers.push(() => { lab.textContent = getLabel(); });
     if (term) attachTooltip(lab, term);
     row.append(lab, value);
     panel.appendChild(row);
@@ -146,50 +166,61 @@ export class FlightHud {
 
   private buildTelemetry(): HTMLElement {
     const panel = el('div', 'hud-panel hud-right');
-    const t = FLIGHT_UI.telemetry;
-    this.line(panel, 'alt', t.altitude);
-    this.line(panel, 'apo', t.apoapsis);
-    this.line(panel, 'peri', t.periapsis);
-    this.line(panel, 'surf', t.surfaceSpeed);
-    this.line(panel, 'vx', t.vx);
-    this.line(panel, 'vy', t.vy);
-    this.line(panel, 'inc', t.inclination);
-    this.line(panel, 'ecc', t.eccentricity);
-    this.line(panel, 'twr', t.twr);
-    this.line(panel, 'maxq', t.maxQ);
+    this.line(panel, 'alt', () => FLIGHT_UI.telemetry.altitude);
+    this.line(panel, 'apo', () => FLIGHT_UI.telemetry.apoapsis);
+    this.line(panel, 'peri', () => FLIGHT_UI.telemetry.periapsis);
+    this.line(panel, 'surf', () => FLIGHT_UI.telemetry.surfaceSpeed);
+    this.line(panel, 'vx', () => FLIGHT_UI.telemetry.vx);
+    this.line(panel, 'vy', () => FLIGHT_UI.telemetry.vy);
+    this.line(panel, 'inc', () => FLIGHT_UI.telemetry.inclination);
+    this.line(panel, 'ecc', () => FLIGHT_UI.telemetry.eccentricity);
+    this.line(panel, 'twr', () => FLIGHT_UI.telemetry.twr);
+    this.line(panel, 'maxq', () => FLIGHT_UI.telemetry.maxQ);
     const thr = el('div', 'tele-row');
     const bar = el('div', 'bar');
     bar.appendChild(this.throttleFill);
     this.values.throttle = el('span', 'tele-value', '0%');
-    thr.append(el('span', 'tele-label', t.throttle), bar, this.values.throttle);
+    const thrLabel = el('span', 'tele-label', FLIGHT_UI.telemetry.throttle);
+    this.localizers.push(() => { thrLabel.textContent = FLIGHT_UI.telemetry.throttle; });
+    thr.append(thrLabel, bar, this.values.throttle);
     panel.appendChild(thr);
-    this.line(panel, 'fuel', t.fuel);
-    this.line(panel, 'handling', t.handling, 'handling');
+    this.line(panel, 'fuel', () => FLIGHT_UI.telemetry.fuel);
+    this.line(panel, 'handling', () => FLIGHT_UI.telemetry.handling, 'handling');
     return panel;
   }
 
   private buildBottom(): HTMLElement {
     const bottom = el('div', 'hud-bottom');
     const z1 = el('div', 'speed-zone z1');
-    z1.title = 'Zona Sempurna: 0 - 2 m/s';
     const z2 = el('div', 'speed-zone z2');
-    z2.title = 'Zona Sukses: 2 - 5 m/s';
     const z3 = el('div', 'speed-zone z3');
-    z3.title = 'Zona Kerusakan: 5 - 12 m/s';
     const z4 = el('div', 'speed-zone z4');
-    z4.title = 'Zona Hancur: > 12 m/s';
+    const syncZones = (): void => {
+      z1.title = FLIGHT_UI.zones.perfect;
+      z2.title = FLIGHT_UI.zones.success;
+      z3.title = FLIGHT_UI.zones.damaged;
+      z4.title = FLIGHT_UI.zones.crash;
+      this.cushionBadge.textContent = FLIGHT_UI.cushionBadge;
+    };
+    syncZones();
+    this.localizers.push(syncZones);
     this.speedGauge.append(z1, z2, z3, z4, this.speedPointer);
     renderKeyHints(this.prompt, FLIGHT_UI.prompt);
+    this.localizers.push(() => { renderKeyHints(this.prompt, FLIGHT_UI.prompt); });
     this.prompt.hidden = true;
     this.cushionBadge.hidden = true;
 
     const navCluster = el('div', 'navball-cluster');
     const sasCol = el('div', 'sas-panel');
-    sasCol.appendChild(el('div', 'sas-title', `${FLIGHT_UI.telemetry.sas} · Otomatis`));
+    const sasTitle = el('div', 'sas-title', `${FLIGHT_UI.telemetry.sas} · ${FLIGHT_UI.auto}`);
+    this.localizers.push(() => { sasTitle.textContent = `${FLIGHT_UI.telemetry.sas} · ${FLIGHT_UI.auto}`; });
+    sasCol.appendChild(sasTitle);
     const sasGrid = el('div', 'sas-grid');
     for (const opt of SAS_OPTIONS) {
       const tag = el('span', 'sas-btn', opt.label);
-      tag.title = `${opt.title} (dikendalikan autopilot)`;
+      const updateTitle = (): void => { tag.title = `${FLIGHT_UI.sasOptions[opt.mode]} (${FLIGHT_UI.autopilotControlled})`; };
+      updateTitle();
+      this.localizers.push(updateTitle);
       this.sasButtons.set(opt.mode, tag);
       sasGrid.appendChild(tag);
     }
@@ -280,7 +311,7 @@ export class FlightHud {
       this.values.ecc.textContent = k.eccentricity.toFixed(3);
       this.values.twr.textContent = sim.twr.toFixed(2);
       const qKpa = sim.dynamicPressurePa / 1000;
-      this.values.maxq.textContent = sim.mach > 0.05 ? `${qKpa.toFixed(1)} kPa · M${sim.mach.toFixed(1)}` : 'Vakum';
+      this.values.maxq.textContent = sim.mach > 0.05 ? `${qKpa.toFixed(1)} kPa · M${sim.mach.toFixed(1)}` : FLIGHT_UI.vacuum;
       this.values.fuel.textContent = `${sim.fuelDisplayKg.toFixed(0)} kg`;
       this.navReadout.textContent = `HDG ${sim.lvlh.headingDeg.toFixed(0)}° | PIT ${sim.lvlh.pitchDeg.toFixed(0)}°`;
     }
@@ -291,7 +322,8 @@ export class FlightHud {
   }
 
   /** Panel hasil di akhir penerbangan; mengembalikan tombol lanjut. */
-  showResult(summary: FlightSummary, onContinue: () => void): void {
+  showResult(summary: FlightSummary, onContinue: () => void, instrumentName?: (id: string) => string): void {
+    this.lastResult = { summary, onContinue, instrumentName };
     clear(this.result);
     const R = FLIGHT_UI.result;
     const title = summary.failed ? R.failed : summary.touchdown ? R[summary.touchdown] : R.failed;
@@ -299,7 +331,8 @@ export class FlightHud {
     this.result.appendChild(el('h2', '', title));
     for (const code of summary.failCodes) this.result.appendChild(el('p', 'result-code', FLIGHT_UI.codes[code]));
     if (summary.touchdown) {
-      this.result.appendChild(el('p', '', `${R.lost}: ${summary.instrumentsLost.length > 0 ? summary.instrumentsLost.join(', ') : R.none}`));
+      const lostNames = summary.instrumentsLost.map((id) => instrumentName?.(id) ?? id);
+      this.result.appendChild(el('p', '', `${R.lost}: ${lostNames.length > 0 ? lostNames.join(', ') : R.none}`));
     }
     const button = el('button', 'launch-button', summary.failed ? R.toReview : R.toSurface);
     button.type = 'button';

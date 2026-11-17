@@ -8,6 +8,7 @@ export interface GameScene {
   render(): void;
   resize(width: number, height: number): void;
   whenReady?(): Promise<void>;
+  onLanguageChange?(): void;
 }
 
 /** Mengelola scene aktif; sengaja bebas dari Three.js agar mudah diuji. */
@@ -40,6 +41,11 @@ export class SceneManager {
     if (!active) return;
     active.exit();
     active.enter();
+  }
+
+  /** Segarkan teks UI pada scene aktif tanpa mereset state simulasi atau kamera. */
+  refreshLanguage(): void {
+    this.active?.onLanguageChange?.();
   }
 
   update(dt: number): void {

@@ -7,6 +7,7 @@ import { describeChoice, formatEffects } from './effectText';
 
 export interface EventDialog {
   close(): void;
+  refreshLocale(event: GameEvent): void;
 }
 
 /**
@@ -25,17 +26,23 @@ export function showEventDialog(
   card.dataset.speaker = 'event';
   host.appendChild(card);
 
-  const showResult = (outcome: ChoiceOutcome): void => {
+  let currentEvent = event;
+  let lastOutcome: ChoiceOutcome | null = null;
+  let closed = false;
+
+  const renderResult = (outcome: ChoiceOutcome): void => {
+    lastOutcome = outcome;
     card.replaceChildren();
     card.dataset.failed = String(outcome.failed);
     card.append(
-      el('div', 'dialog-name', `${EVENT_UI.header}: ${event.title}`),
+      el('div', 'dialog-name', `${EVENT_UI.header}: ${currentEvent.title}`),
       el('h3', 'event-result', outcome.failed ? EVENT_UI.failure : EVENT_UI.success),
       el('p', 'dialog-text', `${EVENT_UI.impact}: ${formatEffects(outcome.effects)}`),
     );
     const next = el('button', 'launch-button', EVENT_UI.next);
     next.type = 'button';
     next.addEventListener('click', () => {
+      closed = true;
       card.remove();
       onClose(outcome);
     });
@@ -43,27 +50,40 @@ export function showEventDialog(
     next.focus();
   };
 
-  card.append(el('div', 'dialog-name', `${EVENT_UI.header}: ${event.title}`), el('p', 'dialog-text', event.description));
-  event.choices.forEach((choice, i) => {
-    const d = describeChoice(choice);
-    const button = el('button', 'choice event-choice');
-    button.type = 'button';
-    button.appendChild(el('span', 'choice-name', choice.label));
-    button.appendChild(el('span', 'choice-sub', `${EVENT_UI.consequence}: ${d.consequence}`));
-    if (d.risk) button.appendChild(el('span', 'choice-sub risk', `${d.risk} (${EVENT_UI.ifFail}: ${d.failImpact})`));
-    button.addEventListener('click', () => {
-      if (choice.minigameId && runMinigame) {
-        card.hidden = true;
-        void runMinigame(choice.minigameId).then((score) => {
-          card.hidden = false;
-          showResult(resolve(i, score));
-        });
-      } else showResult(resolve(i));
+  const renderChoices = (): void => {
+    card.replaceChildren();
+    card.append(el('div', 'dialog-name', `${EVENT_UI.header}: ${currentEvent.title}`), el('p', 'dialog-text', currentEvent.description));
+    currentEvent.choices.forEach((choice, i) => {
+      const d = describeChoice(choice);
+      const button = el('button', 'choice event-choice');
+      button.type = 'button';
+      button.appendChild(el('span', 'choice-name', choice.label));
+      button.appendChild(el('span', 'choice-sub', `${EVENT_UI.consequence}: ${d.consequence}`));
+      if (d.risk) button.appendChild(el('span', 'choice-sub risk', `${d.risk} (${EVENT_UI.ifFail}: ${d.failImpact})`));
+      button.addEventListener('click', () => {
+        if (choice.minigameId && runMinigame) {
+          card.hidden = true;
+          void runMinigame(choice.minigameId).then((score) => {
+            card.hidden = false;
+            renderResult(resolve(i, score));
+          });
+        } else renderResult(resolve(i));
+      });
+      card.appendChild(button);
     });
-    card.appendChild(button);
-  });
-  (card.querySelector('button.event-choice') as HTMLButtonElement | null)?.focus();
-  return { close: () => card.remove() };
+    (card.querySelector('button.event-choice') as HTMLButtonElement | null)?.focus();
+  };
+
+  renderChoices();
+  return {
+    close: () => { closed = true; card.remove(); },
+    refreshLocale: (nextEvent) => {
+      if (closed) return;
+      currentEvent = nextEvent;
+      if (lastOutcome) renderResult(lastOutcome);
+      else renderChoices();
+    },
+  };
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -206,7 +226,10 @@ export function createPortrait(speaker: DialogSpeaker): SVGElement {
   return svg;
 }
 
-export interface DialogSequence { skip(): void }
+export interface DialogSequence {
+  skip(): void;
+  refreshLocale(nextLines?: DialogLine[]): void;
+}
 
 /**
  * Panel dialog cerita: potret, nama pembicara, teks mengetik dengan bunyi bip. Klik Lanjut (atau Enter/Spasi)
@@ -215,8 +238,9 @@ export interface DialogSequence { skip(): void }
 export function showDialogSequence(host: HTMLElement, lines: DialogLine[], onDone: () => void): DialogSequence {
   if (lines.length === 0) {
     onDone();
-    return { skip: () => undefined };
+    return { skip: () => undefined, refreshLocale: () => undefined };
   }
+  let currentLines = lines;
   const card = el('div', 'dialog story-dialog');
   const portraitBox = el('div', 'portrait-box');
   const body = el('div', 'story-body');
@@ -244,7 +268,7 @@ export function showDialogSequence(host: HTMLElement, lines: DialogLine[], onDon
     onDone();
   };
   const showLine = (): void => {
-    const line = lines[index];
+    const line = currentLines[index];
     portraitBox.replaceChildren(createPortrait(line.speaker));
     portraitBox.dataset.speaking = 'true';
     card.dataset.speaker = line.speaker;
@@ -253,10 +277,11 @@ export function showDialogSequence(host: HTMLElement, lines: DialogLine[], onDon
     typed = 0;
     stopTyping();
     timer = window.setInterval(() => {
+      const active = currentLines[index];
       typed += 1;
-      text.textContent = line.text.slice(0, typed);
+      text.textContent = active.text.slice(0, typed);
       if (typed % BLIP_EVERY === 0) audio.blip();
-      if (typed >= line.text.length) {
+      if (typed >= active.text.length) {
         stopTyping();
         portraitBox.dataset.speaking = 'false';
       }
@@ -265,7 +290,7 @@ export function showDialogSequence(host: HTMLElement, lines: DialogLine[], onDon
     next.focus();
   };
   const advance = (): void => {
-    const line = lines[index];
+    const line = currentLines[index];
     if (typed < line.text.length) {
       stopTyping();
       typed = line.text.length;
@@ -274,7 +299,7 @@ export function showDialogSequence(host: HTMLElement, lines: DialogLine[], onDon
       return;
     }
     index += 1;
-    if (index >= lines.length) finish();
+    if (index >= currentLines.length) finish();
     else showLine();
   };
   function onKey(e: KeyboardEvent): void {
@@ -287,7 +312,23 @@ export function showDialogSequence(host: HTMLElement, lines: DialogLine[], onDon
   skip.addEventListener('click', finish);
   window.addEventListener('keydown', onKey);
   showLine();
-  return { skip: finish };
+  return {
+    skip: finish,
+    refreshLocale: (nextLines) => {
+      if (finished) return;
+      if (nextLines && nextLines.length === currentLines.length) currentLines = nextLines;
+      const line = currentLines[index];
+      name.textContent = SPEAKER_NAMES[line.speaker];
+      next.textContent = STORY_UI.next;
+      skip.textContent = STORY_UI.skip;
+      if (timer === 0) {
+        typed = line.text.length;
+        text.textContent = line.text;
+      } else {
+        text.textContent = line.text.slice(0, typed);
+      }
+    },
+  };
 }
 
 /** Gelembung NOVA non-blokir yang hilang sendiri. */

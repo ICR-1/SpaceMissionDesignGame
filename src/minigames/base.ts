@@ -19,6 +19,7 @@ export interface Panel {
   status: HTMLElement;
   setTimer(fraction01: number): void;
   showResult(score01: number): void;
+  refreshLocale(title: string, hint: string, score01: number | null): void;
 }
 
 function createPanel(container: HTMLElement, title: string, hint: string): Panel {
@@ -37,8 +38,9 @@ function createPanel(container: HTMLElement, title: string, hint: string): Panel
   result.hidden = true;
   const hintEl = el('div', 'minigame-hint');
   renderKeyHints(hintEl, hint);
+  const titleEl = el('div', 'minigame-title', title);
   body.append(canvas, timer, status, hintEl, result);
-  root.append(el('div', 'minigame-title', title), body);
+  root.append(titleEl, body);
   container.appendChild(root);
   return {
     root, body, canvas, g, status,
@@ -46,6 +48,11 @@ function createPanel(container: HTMLElement, title: string, hint: string): Panel
     showResult: (score01) => {
       result.textContent = `${MINIGAME_UI.result} ${Math.round(score01 * 100)}%`;
       result.hidden = false;
+    },
+    refreshLocale: (nextTitle, nextHint, score01) => {
+      titleEl.textContent = nextTitle;
+      renderKeyHints(hintEl, nextHint);
+      if (score01 !== null) result.textContent = `${MINIGAME_UI.result} ${Math.round(score01 * 100)}%`;
     },
   };
 }
@@ -128,6 +135,14 @@ export abstract class BaseMinigame implements Minigame {
   result(): MinigameResult | null {
     return this.res;
   }
+
+  refreshLocale(): void {
+    this.panel?.refreshLocale(this.title, this.hint, this.finished ? this.score : null);
+    this.onRefreshLocale();
+    if (this.panel) this.draw();
+  }
+
+  protected onRefreshLocale(): void {}
 
   dispose(): void {
     for (const l of this.listeners) l.target.removeEventListener(l.type, l.fn);

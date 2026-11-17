@@ -43,7 +43,7 @@ import {
 import type { Id, Objective } from '../rules/types';
 import { linesFor } from '../rules/dialogs';
 import { showNovaBubble } from '../ui/dialog';
-import { JOURNAL_NOTE, journalFacts } from '../ui/journalFacts';
+import { journalFacts, journalNote } from '../ui/journalFacts';
 import { SurfaceHud, type ObjectiveView } from '../ui/surfaceHud';
 import { TutorGuide } from '../ui/tutorOverlay';
 import { BaseScene } from './baseScene';
@@ -414,7 +414,10 @@ export class SurfaceScene extends BaseScene {
   private refreshObjectives(): void {
     if (!this.assembly || !this.hud) return;
     const catalog = this.ctx.catalog;
+    const destObjectives = this.assembly.destination.objectives;
     const list: ObjectiveView[] = this.pois.map((p) => {
+      const latest = destObjectives.find((o) => o.id === p.objective.id);
+      if (latest) p.objective = latest;
       const inst = catalog.instruments.find((i) => i.id === p.objective.instrumentId);
       return {
         title: p.objective.title, required: p.objective.required, done: p.done,
@@ -422,6 +425,24 @@ export class SurfaceScene extends BaseScene {
       };
     });
     this.hud.setObjectives(list);
+  }
+
+  private populateJournal(): void {
+    if (!this.hud || !this.assembly) return;
+    const dest = this.assembly.destination;
+    const data: [string, string][] = [...this.collected.entries()].map(([id, score]) => [
+      this.ctx.catalog.instruments.find((i) => i.id === id)?.name ?? id, `${Math.round(score * 100)}%`,
+    ]);
+    this.hud.setJournal(journalFacts(dest), journalNote(), data);
+  }
+
+  onLanguageChange(): void {
+    this.assembly = resolveAssembly(this.ctx.store.get().mission, this.ctx.catalog);
+    this.hud?.refreshLocale((id) => this.ctx.catalog.events.find((e) => e.id === id));
+    this.refreshObjectives();
+    if (this.journalOpen) this.populateJournal();
+    this.tutor?.refreshLocale();
+    this.minigame?.game.refreshLocale?.();
   }
 
   private distanceFromHub(): number {
@@ -747,11 +768,7 @@ export class SurfaceScene extends BaseScene {
     const M = SURFACE_UI.messages, P = SURFACE_UI.prompts;
 
     if (input.consumePressed('Tab')) {
-      const dest = this.assembly.destination;
-      const data: [string, string][] = [...this.collected.entries()].map(([id, score]) => [
-        this.ctx.catalog.instruments.find((i) => i.id === id)?.name ?? id, `${Math.round(score * 100)}%`,
-      ]);
-      hud.setJournal(journalFacts(dest), JOURNAL_NOTE, data);
+      this.populateJournal();
       this.journalOpen = hud.toggleJournal();
       if (this.journalOpen) this.ctx.cursor.unlock(true);
       else this.ctx.cursor.lock();
@@ -911,23 +928,26 @@ export class SurfaceScene extends BaseScene {
     this.ctx.cursor.unlock();
     audio.alarm();
     const seed = this.ctx.store.get().mission.seed;
-    const openDialog = (): void => hud.showEvent(
-      next.event,
-      (i, minigameScore) => {
-        const outcome = rollChoice(next.event, i, seed, minigameScore);
-        this.state = applyEffects(this.state, outcome.effects);
-        if (outcome.handledWell) {
-          this.eventsHandledWell += 1;
-          this.handledEventIds.push(next.event.id);
-        }
-        return outcome;
-      },
-      () => {
-        this.ctx.input.clear();
-        this.ctx.cursor.lock();
-      },
-      (minigameId) => new Promise<number>((done) => this.startEventMinigame(minigameId, done)),
-    );
+    const openDialog = (): void => {
+      const latestEvent = this.ctx.catalog.events.find((e) => e.id === next.event.id) ?? next.event;
+      hud.showEvent(
+        latestEvent,
+        (i, minigameScore) => {
+          const outcome = rollChoice(latestEvent, i, seed, minigameScore);
+          this.state = applyEffects(this.state, outcome.effects);
+          if (outcome.handledWell) {
+            this.eventsHandledWell += 1;
+            this.handledEventIds.push(latestEvent.id);
+          }
+          return outcome;
+        },
+        () => {
+          this.ctx.input.clear();
+          this.ctx.cursor.lock();
+        },
+        (minigameId) => new Promise<number>((done) => this.startEventMinigame(minigameId, done)),
+      );
+    };
     const spec = eventSceneFor(next.event.id);
     if (!spec) { this.startEventFx(next.event.id); openDialog(); return; }
     this.manualCover = false;

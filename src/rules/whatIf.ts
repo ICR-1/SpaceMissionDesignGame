@@ -29,8 +29,10 @@ const MIN_CHANGE = 0.005;
 
 const byKind = (catalog: Catalog, kind: Module['kind']): Module[] => catalog.modules.filter((m) => m.kind === kind);
 
-function candidates(config: MissionConfig, catalog: Catalog): Omit<Suggestion, 'changes' | 'costDeltaMusd' | 'go'>[] {
-  const out: Omit<Suggestion, 'changes' | 'costDeltaMusd' | 'go'>[] = [];
+type Candidate = Omit<Suggestion, 'changes' | 'costDeltaMusd' | 'go'> & { groupKey?: string };
+
+function candidates(config: MissionConfig, catalog: Catalog): Candidate[] {
+  const out: Candidate[] = [];
   const fuel = config.fuelFraction ?? 1;
   if (fuel + FUEL_STEP <= 1 + 1e-9) {
     out.push({ id: 'fuel_up', kind: 'fuel_up', fuelFrom: fuel, fuelTo: Math.min(1, fuel + FUEL_STEP), config: setFuelFraction(config, fuel + FUEL_STEP) });
@@ -42,12 +44,12 @@ function candidates(config: MissionConfig, catalog: Catalog): Omit<Suggestion, '
   for (const kind of ['solar', 'battery', 'tank'] as const) {
     for (const m of byKind(catalog, kind)) {
       const n = moduleCount(config, m.id);
-      out.push({ id: `add_${m.id}`, kind: 'add_module', moduleName: m.name, config: setModuleCount(config, catalog, m.id, n + 1) });
+      out.push({ id: `add_${m.id}`, kind: 'add_module', moduleName: m.name, groupKey: `add:${kind}`, config: setModuleCount(config, catalog, m.id, n + 1) });
     }
   }
   const relay = catalog.modules.find((m) => m.id === RELAY_ANTENNA_ID);
   if (relay && moduleCount(config, relay.id) === 0) {
-    out.push({ id: `add_${relay.id}`, kind: 'add_module', moduleName: relay.name, config: setModuleCount(config, catalog, relay.id, 1) });
+    out.push({ id: `add_${relay.id}`, kind: 'add_module', moduleName: relay.name, groupKey: `add:${relay.kind}`, config: setModuleCount(config, catalog, relay.id, 1) });
   }
   // Ganti ke varian lain pada grup eksklusif: mesin, lander, antena utama
   for (const kind of ['engine', 'lander'] as const) {
@@ -79,8 +81,8 @@ export function suggestChanges(config: MissionConfig, catalog: Catalog, requireO
   const base = preflight(config, catalog, requireObjectives);
   const baseMargins = Object.fromEntries(KEYS.map((k) => [k, base.indicators[k].margin])) as Record<IndicatorKey, number>;
   const weakest = KEYS.reduce((w, k) => (baseMargins[k] < baseMargins[w] ? k : w), KEYS[0]);
-  const scored: { s: Suggestion; gain: number; fixes: number }[] = [];
-  for (const cand of candidates(config, catalog)) {
+  const scored: { s: Suggestion; groupKey?: string; gain: number; fixes: number }[] = [];
+  for (const { groupKey, ...cand } of candidates(config, catalog)) {
     const r = preflight(cand.config, catalog, requireObjectives);
     if (r.assemblyErrors.length > 0) continue;
     const newRed = KEYS.some((k) => r.indicators[k].status === 'red' && base.indicators[k].status !== 'red');
@@ -93,15 +95,15 @@ export function suggestChanges(config: MissionConfig, catalog: Catalog, requireO
     if (gain < MIN_CHANGE && fixes === 0) continue;
     scored.push({
       s: { ...cand, changes, costDeltaMusd: r.metrics.totalCostMusd - base.metrics.totalCostMusd, go: r.go },
-      gain, fixes,
+      groupKey, gain, fixes,
     });
   }
   scored.sort((a, b) => b.fixes - a.fixes || b.gain - a.gain || a.s.costDeltaMusd - b.s.costDeltaMusd || (a.s.id < b.s.id ? -1 : 1));
   // Satu saran per jenis (hindari tiga varian tangki berurutan)
   const seen = new Set<string>();
   const out: Suggestion[] = [];
-  for (const { s } of scored) {
-    const group = s.id.startsWith('add_') ? `add:${s.moduleName?.split(' ')[0]}` : s.kind;
+  for (const { s, groupKey } of scored) {
+    const group = groupKey ?? s.kind;
     if (seen.has(group)) continue;
     seen.add(group);
     out.push(s);

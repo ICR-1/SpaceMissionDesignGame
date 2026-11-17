@@ -181,6 +181,10 @@ describe('pengaturan visual tersimpan', () => {
     expect(sanitizeSave({ version: 1, music: 'x' }).music).toBe(true);
     expect(sanitizeSave({ version: 1, detail: 'low' }).detail).toBe('low');
     expect(sanitizeSave({ version: 1, detail: 'ultra' }).detail).toBe('high');
+    expect(defaultSave().lang).toBe('id');
+    expect(sanitizeSave({ version: 1, lang: 'en' }).lang).toBe('en');
+    expect(sanitizeSave({ version: 1, lang: 'id' }).lang).toBe('id');
+    expect(sanitizeSave({ version: 1, lang: 'jp' }).lang).toBe('id');
   });
   it('skala teks dibulatkan dan dijepit ke tingkat yang tersedia', () => {
     expect(sanitizeSave({ version: 1, textScale: 9 }).textScale).toBe(2);

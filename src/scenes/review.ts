@@ -2,23 +2,23 @@ import * as THREE from 'three';
 import { audio } from '../core/audio';
 import type { GameContext } from '../core/context';
 import { defaultMission } from '../core/missionBuilder';
-import { FLIGHT_UI, REVIEW_UI } from '../core/strings';
+import { FLIGHT_UI, getLang, REVIEW_UI } from '../core/strings';
 import { linesFor } from '../rules/dialogs';
 import type { MissionOutcome } from '../rules/missionResult';
-import type { MissionConfig } from '../rules/types';
+import type { DialogLine, MissionConfig } from '../rules/types';
 import { missionSucceeded, modeRules, nextDestinationId, recordMission, type MissionRecord } from '../rules/progress';
 import { stopTutor } from '../rules/tutor';
 import { preflight } from '../rules/preflight';
 import { suggestChanges, weakestIndicator, type Suggestion } from '../rules/whatIf';
 import { earnedMedals, explainScore, MEDALS, mainCauses, sectionsForCodes } from '../rules/review';
 import { SCORE } from '../core/constants';
-import { showDialogSequence } from '../ui/dialog';
-import { el } from '../ui/dom';
+import { showDialogSequence, type DialogSequence } from '../ui/dialog';
+import { clear, el } from '../ui/dom';
 import { BaseScene } from './baseScene';
 
 const SPIN = 0.5;
 const pct = (v: number): string => (Number.isFinite(v) ? (v * 100).toFixed(0) : '∞');
-const fmt = (n: number): string => n.toFixed(1).replace('.', ',');
+const fmt = (n: number): string => (getLang() === 'en' ? n.toFixed(1) : n.toFixed(1).replace('.', ','));
 
 /** Kolom review: label judul menempel di tepi atas kartu (di luar kartu agar tidak ikut ter-scroll/terpotong). */
 function withTab(card: HTMLElement, label: string): HTMLElement {
@@ -33,6 +33,9 @@ export class ReviewScene extends BaseScene {
   private readonly gem: THREE.Mesh;
   private recorded: MissionOutcome | null = null;
   private record: MissionRecord | null = null;
+  private contentHost: HTMLElement | null = null;
+  private activeDialog: { getLines: () => DialogLine[]; seq: DialogSequence } | null = null;
+  private endingCardShown = false;
 
   constructor(ctx: GameContext) {
     super(ctx);
@@ -55,17 +58,84 @@ export class ReviewScene extends BaseScene {
         save: !state.save.tutorialSeen ? { ...state.save, tutorialSeen: true } : state.save,
       });
     }
+    this.endingCardShown = false;
+    this.activeDialog = null;
+    this.contentHost = el('div');
+    ui.appendChild(this.contentHost);
+
     const outcome = state.outcome;
     this.gem.visible = outcome !== null && outcome !== undefined;
     if (!outcome) {
-      const empty = el('div', 'briefing-menu centered review-empty');
-      const go = el('button', 'launch-button', REVIEW_UI.toDesign);
-      go.type = 'button';
-      go.addEventListener('click', () => this.ctx.go('design'));
-      empty.append(el('h2', '', REVIEW_UI.emptyTitle), el('p', '', REVIEW_UI.emptyBody), go);
-      ui.appendChild(empty);
+      this.renderEmpty(this.contentHost);
       return;
     }
+
+    const config = state.mission;
+    const catalog = this.ctx.catalog;
+    const rules = modeRules(state.mode);
+    const pre = preflight(config, catalog, rules.requireObjectives);
+    const flight = state.flight;
+    const success = missionSucceeded(outcome);
+    (this.gem.material as THREE.MeshStandardMaterial).color.set(success ? 0x6bff9e : 0xff6b6b);
+
+    // Catat progres sekali per hasil misi (bukan setiap kali scene dibuka).
+    if (this.recorded !== outcome && flight && rules.recordsProgress) {
+      const medals = earnedMedals({ outcome, flight, surface: state.surface, budgetMargin: pre.indicators.budget.margin });
+      this.record = recordMission(state.save, catalog.destinations, config.destinationId, outcome, medals);
+      this.recorded = outcome;
+      this.ctx.store.set({ save: this.record.save });
+    }
+    audio.jingle(success);
+    this.renderReport(this.contentHost);
+
+    const record = this.record;
+    if (rules.storyDialogs && record?.newBeacon) {
+      const beaconId = record.newBeacon;
+      const getLines = (): DialogLine[] => linesFor(this.ctx.catalog.dialogs, beaconId);
+      const seq = showDialogSequence(ui, getLines(), () => {
+        this.activeDialog = null;
+      });
+      this.activeDialog = { getLines, seq };
+    }
+  }
+
+  protected override onExit(): void {
+    this.activeDialog = null;
+    this.contentHost = null;
+    this.endingCardShown = false;
+  }
+
+  onLanguageChange(): void {
+    if (this.activeDialog) {
+      this.activeDialog.seq.refreshLocale(this.activeDialog.getLines());
+    }
+    if (!this.contentHost) return;
+    if (this.endingCardShown) {
+      this.renderEndingCard(this.contentHost);
+      return;
+    }
+    if (!this.ctx.store.get().outcome) {
+      this.renderEmpty(this.contentHost);
+      return;
+    }
+    this.renderReport(this.contentHost);
+  }
+
+  private renderEmpty(host: HTMLElement): void {
+    clear(host);
+    const empty = el('div', 'briefing-menu centered review-empty');
+    const go = el('button', 'launch-button', REVIEW_UI.toDesign);
+    go.type = 'button';
+    go.addEventListener('click', () => this.ctx.go('design'));
+    empty.append(el('h2', '', REVIEW_UI.emptyTitle), el('p', '', REVIEW_UI.emptyBody), go);
+    host.appendChild(empty);
+  }
+
+  private renderReport(host: HTMLElement): void {
+    clear(host);
+    const state = this.ctx.store.get();
+    const outcome = state.outcome;
+    if (!outcome) return;
     const config = state.mission;
     const catalog = this.ctx.catalog;
     const rules = modeRules(state.mode);
@@ -73,17 +143,7 @@ export class ReviewScene extends BaseScene {
     const flight = state.flight;
     const surface = state.surface;
     const success = missionSucceeded(outcome);
-    (this.gem.material as THREE.MeshStandardMaterial).color.set(success ? 0x6bff9e : 0xff6b6b);
-
-    // Catat progres sekali per hasil misi (bukan setiap kali scene dibuka).
-    if (this.recorded !== outcome && flight && rules.recordsProgress) {
-      const medals = earnedMedals({ outcome, flight, surface, budgetMargin: pre.indicators.budget.margin });
-      this.record = recordMission(state.save, catalog.destinations, config.destinationId, outcome, medals);
-      this.recorded = outcome;
-      this.ctx.store.set({ save: this.record.save });
-    }
     const record = this.record;
-    audio.jingle(success);
 
     const dest = catalog.destinations.find((d) => d.id === config.destinationId);
     const required = dest?.objectives.filter((o) => o.required) ?? [];
@@ -137,7 +197,10 @@ export class ReviewScene extends BaseScene {
     const causes = mainCauses(outcome.codes);
     if (causes.length === 0) left.appendChild(el('p', '', REVIEW_UI.noCauses));
     for (const c of causes) left.appendChild(el('p', 'cause', `${c}: ${FLIGHT_UI.codes[c]}`));
-    if (flight?.touchdown) left.appendChild(el('div', 'score-explain', `${REVIEW_UI.details}: pendaratan ${REVIEW_UI.touchdown[flight.touchdown]}`));
+    if (flight?.touchdown) {
+      const td = REVIEW_UI.touchdownLabel.replace('{outcome}', REVIEW_UI.touchdown[flight.touchdown]);
+      left.appendChild(el('div', 'score-explain', `${REVIEW_UI.details}: ${td}`));
+    }
     left.appendChild(this.buildWhatIf(config, rules.requireObjectives));
 
     const right = el('div', 'review-card');
@@ -153,9 +216,8 @@ export class ReviewScene extends BaseScene {
       const medalBox = el('div');
       const names = Object.values(MEDALS).filter((m) => got.includes(m.id));
       if (names.length === 0) medalBox.textContent = REVIEW_UI.noMedals;
-      names.forEach((m) => medalBox.appendChild(el('span', 'medal', m.name)));
+      names.forEach((m) => medalBox.appendChild(el('span', 'medal', REVIEW_UI.medalNames[m.id] ?? m.name)));
       right.appendChild(medalBox);
-
     } else right.appendChild(el('p', 'score-explain', REVIEW_UI.freeNote));
 
     const actions = el('div', 'review-actions');
@@ -169,17 +231,26 @@ export class ReviewScene extends BaseScene {
     next.type = 'button';
     next.disabled = rules.recordsProgress && !success;
     next.textContent = rules.recordsProgress ? REVIEW_UI.next : REVIEW_UI.freeNext;
-    next.addEventListener('click', () => (rules.recordsProgress ? this.advance(ui) : this.backToMenu()));
+    next.addEventListener('click', () => (rules.recordsProgress ? this.advance(this.ui ?? host) : this.backToMenu()));
     actions.append(next, fix);
     if (!success && rules.recordsProgress) actions.appendChild(el('p', 'score-explain', REVIEW_UI.continueHint));
     right.appendChild(actions);
     grid.append(withTab(left, REVIEW_UI.tabReport), withTab(right, rules.recordsProgress ? REVIEW_UI.tabProgress : REVIEW_UI.tabNext));
-    ui.appendChild(grid);
+    host.appendChild(grid);
+  }
 
-    if (rules.storyDialogs && record?.newBeacon) {
-      const lines = linesFor(catalog.dialogs, record.newBeacon);
-      showDialogSequence(ui, lines, () => undefined);
-    }
+  private renderEndingCard(host: HTMLElement): void {
+    clear(host);
+    const card = el('div', 'briefing-menu centered');
+    card.appendChild(el('h2', '', REVIEW_UI.ending));
+    const back = el('button', 'launch-button', REVIEW_UI.backToBriefing);
+    back.type = 'button';
+    back.addEventListener('click', () => {
+      this.ctx.store.set({ mission: defaultMission('moon', this.ctx.store.get().mission.seed), flight: null, surface: null, outcome: null });
+      this.ctx.go('briefing');
+    });
+    card.appendChild(back);
+    host.appendChild(card);
   }
 
   /** Panel "Bagaimana jika": saran satu langkah dengan perubahan margin kelima indikator (dihitung dari rakitan yang diterbangkan). */
@@ -234,18 +305,13 @@ export class ReviewScene extends BaseScene {
       this.ctx.go('briefing');
       return;
     }
-    showDialogSequence(ui, linesFor(this.ctx.catalog.dialogs, 'end'), () => {
-      const card = el('div', 'briefing-menu centered');
-      card.appendChild(el('h2', '', REVIEW_UI.ending));
-      const back = el('button', 'launch-button', REVIEW_UI.backToBriefing);
-      back.type = 'button';
-      back.addEventListener('click', () => {
-        this.ctx.store.set({ mission: defaultMission('moon', mission.seed), flight: null, surface: null, outcome: null });
-        this.ctx.go('briefing');
-      });
-      card.appendChild(back);
-      ui.appendChild(card);
+    const getLines = (): DialogLine[] => linesFor(this.ctx.catalog.dialogs, 'end');
+    const seq = showDialogSequence(ui, getLines(), () => {
+      this.activeDialog = null;
+      this.endingCardShown = true;
+      if (this.contentHost) this.renderEndingCard(this.contentHost);
     });
+    this.activeDialog = { getLines, seq };
   }
 
   update(dt: number): void {

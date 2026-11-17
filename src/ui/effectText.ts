@@ -11,7 +11,7 @@ export function formatEffect(e: Effect): string {
   switch (e.target) {
     case 'vehiclePower': return `${label} ${sign}${abs}%`;
     case 'signal': return `${label} ${sign}${Math.round(abs * 100)}% ${EVENT_UI.signalFor}`;
-    case 'timeSec': return `${label} ${sign}${abs} dtk`;
+    case 'timeSec': return `${label} ${sign}${abs} ${EVENT_UI.secUnit}`;
     case 'deltaVms': return `${label} ${sign}${abs} m/s`;
     default: return `${label} ${sign}${abs}`;
   }

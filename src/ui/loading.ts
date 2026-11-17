@@ -24,6 +24,14 @@ export class LoadingScreen {
     const title = root?.querySelector<HTMLElement>('.loading-title');
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     title?.replaceChildren(createLogo(TITLE_UI.logo, !reduced));
+    const kicker = root?.querySelector<HTMLElement>('.loading-kicker');
+    if (kicker) {
+      const extra = document.createElement('span');
+      extra.className = 'loading-kicker-extra';
+      extra.textContent = LOADING_UI.kickerExtra;
+      kicker.replaceChildren(document.createTextNode(LOADING_UI.kickerMain), extra);
+    }
+    if (this.step) this.step.textContent = LOADING_UI.subtitle;
     if (root) {
       this.lastTick = performance.now();
       this.rafId = requestAnimationFrame((t) => this.tick(t));

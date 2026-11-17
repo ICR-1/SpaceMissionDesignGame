@@ -39,8 +39,8 @@ function shape(g: CanvasRenderingContext2D, kind: number, x: number, y: number, 
 /** Pasang dan Sambungkan: cocokkan tiap kabel berwarna ke port berbentuk sama sebelum waktu habis. */
 export class WeatherConnect extends BaseMinigame {
   readonly id = 'weather_connect';
-  readonly title = MINIGAME_UI.weather.title;
-  readonly hint = MINIGAME_UI.weather.hint;
+  get title(): string { return MINIGAME_UI.weather.title; }
+  get hint(): string { return MINIGAME_UI.weather.hint; }
   get durationSec(): number { return MG.weather.timeLimitSec; }
 
   private puzzle!: WeatherPuzzle;

@@ -13,8 +13,8 @@ const HORIZON_Y = 150;
 /** Foto Panorama: geser kamera 360 derajat, pusatkan objek di bingkai, tekan Spasi dan tahan stabil. */
 export class PhotoPanorama extends BaseMinigame {
   readonly id = 'photo_panorama';
-  readonly title = MINIGAME_UI.photo.title;
-  readonly hint = MINIGAME_UI.photo.hint;
+  get title(): string { return MINIGAME_UI.photo.title; }
+  get hint(): string { return MINIGAME_UI.photo.hint; }
   get durationSec(): number { return P.timeLimitSec; }
 
   private params!: PhotoParams;

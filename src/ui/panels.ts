@@ -4,7 +4,7 @@ import {
   moduleCount, setDestination, setExclusive, setFuelFraction, setModuleCount, setRocket,
   STUDENT_PRESETS, toggleInstrument,
 } from '../core/missionBuilder';
-import { DESIGN, STORY_UI, STUDENT_UI } from '../core/strings';
+import { DESIGN, getLang, NOVA_MESSAGES, STORY_UI, STUDENT_UI } from '../core/strings';
 import type { PreflightResult } from '../rules/preflight';
 import type { Catalog, Id, MissionConfig, Module } from '../rules/types';
 import { clear, el } from './dom';
@@ -84,10 +84,16 @@ function counterGroup(title: string, items: Item[], onSet: (id: Id, n: number) =
   };
 }
 
-/** Angka bulat dengan pemisah ribuan (roket NASA bermuatan puluhan ribu kg), mis. 16.800. */
-const fmt = (n: number): string => Math.round(n).toLocaleString('id-ID');
+/** Angka bulat dengan pemisah ribuan (roket NASA bermuatan puluhan ribu kg), mis. 16.800 / 16,800. */
+const fmt = (n: number): string => Math.round(n).toLocaleString(getLang() === 'en' ? 'en-US' : 'id-ID');
 
 const info = (m: Module, extra = ''): string => `${extra}${fmt(m.massKg)} kg · ${m.costMusd} MUSD`;
+
+export interface DesignPanelUiState {
+  openSections: string[];
+  leftScrollTop: number;
+  rightScrollTop: number;
+}
 
 /** Panel katalog (kiri) dan inspektur preflight (kanan) pada scene Desain. */
 export class DesignPanel {
@@ -103,6 +109,8 @@ export class DesignPanel {
   private readonly launch = el('button', 'launch-button', DESIGN.launch);
   private readonly fuel = el('input', 'fuel-slider');
   private readonly fuelValue = el('span', 'fuel-value');
+  private readonly leftRoot: HTMLElement;
+  private readonly rightRoot: HTMLElement;
 
   constructor(
     ui: HTMLElement,
@@ -112,12 +120,43 @@ export class DesignPanel {
     private readonly options: { unlocked: Id[]; flagged: string[] } = { unlocked: ['moon', 'mars'], flagged: [] },
   ) {
     this.config = initial;
-    ui.append(this.buildCatalog(), this.buildInspector());
+    this.leftRoot = this.buildCatalog();
+    this.rightRoot = this.buildInspector();
+    ui.append(this.leftRoot, this.rightRoot);
     ui.querySelectorAll<HTMLElement>('.panel-section').forEach((sec) => {
       const flagged = this.options.flagged.includes(sec.dataset.section ?? '');
       sec.classList.toggle('flagged', flagged);
       if (flagged) sec.classList.add('open');
     });
+  }
+
+  getUiState(): DesignPanelUiState {
+    const openSections: string[] = [];
+    this.leftRoot.querySelectorAll<HTMLElement>('.panel-section.open').forEach((sec) => {
+      if (sec.dataset.section) openSections.push(sec.dataset.section);
+    });
+    const scroll = this.rightRoot.querySelector<HTMLElement>('.panel-scroll');
+    return {
+      openSections,
+      leftScrollTop: this.leftRoot.scrollTop,
+      rightScrollTop: scroll?.scrollTop ?? 0,
+    };
+  }
+
+  restoreUiState(state: DesignPanelUiState): void {
+    const open = new Set(state.openSections);
+    this.leftRoot.querySelectorAll<HTMLElement>('.panel-section').forEach((sec) => {
+      const key = sec.dataset.section;
+      if (key) sec.classList.toggle('open', open.has(key));
+    });
+    this.leftRoot.scrollTop = state.leftScrollTop;
+    const scroll = this.rightRoot.querySelector<HTMLElement>('.panel-scroll');
+    if (scroll) scroll.scrollTop = state.rightScrollTop;
+  }
+
+  dispose(): void {
+    this.leftRoot.remove();
+    this.rightRoot.remove();
   }
 
   private kind(kind: Module['kind']): Module[] {
@@ -134,7 +173,7 @@ export class DesignPanel {
       const locked = !this.options.unlocked.includes(d.id);
       return {
         id: d.id, label: d.name, disabled: locked,
-        sub: locked ? STORY_UI.locked : `g ${d.gravity} m/s² · budget ${d.budgetMusd} MUSD · Δv ${d.deltaVKmS} km/s`,
+        sub: locked ? STORY_UI.locked : `g ${d.gravity} m/s² · ${DESIGN.budgetWord} ${d.budgetMusd} MUSD · Δv ${d.deltaVKmS} km/s`,
       };
     }), (id) => this.handlers.change((c) => setDestination(c, id)), 'destination');
     this.syncs.push(() => dest.sync(this.config.destinationId));
@@ -147,13 +186,15 @@ export class DesignPanel {
     );
     const presetsGrid = el('div', 'student-presets-grid');
     const destId = () => this.config.destinationId;
+    const presetDesc = (d: string, key: 'standard' | 'cruiser'): string =>
+      STUDENT_UI.presetDescs[d]?.[key] ?? STUDENT_PRESETS[d]?.[key].desc ?? '';
 
     const btnStd = el('button', 'preset-btn');
     btnStd.type = 'button';
     btnStd.dataset.preset = 'standard';
     btnStd.append(
       el('span', 'preset-btn-name', STUDENT_UI.presetStandard),
-      el('span', 'preset-btn-desc', STUDENT_PRESETS[destId()]?.standard.desc ?? ''),
+      el('span', 'preset-btn-desc', presetDesc(destId(), 'standard')),
     );
     btnStd.addEventListener('click', () => {
       this.handlers.change((c) => getPresetMission(c.destinationId, 'standard', c.seed));
@@ -164,7 +205,7 @@ export class DesignPanel {
     btnCruiser.dataset.preset = 'cruiser';
     btnCruiser.append(
       el('span', 'preset-btn-name', STUDENT_UI.presetCruiser),
-      el('span', 'preset-btn-desc', STUDENT_PRESETS[destId()]?.cruiser.desc ?? ''),
+      el('span', 'preset-btn-desc', presetDesc(destId(), 'cruiser')),
     );
     btnCruiser.addEventListener('click', () => {
       this.handlers.change((c) => getPresetMission(c.destinationId, 'cruiser', c.seed));
@@ -184,12 +225,10 @@ export class DesignPanel {
       btnStd.classList.toggle('active', active === 'standard');
       btnCruiser.classList.toggle('active', active === 'cruiser');
       const d = destId();
-      const pStd = STUDENT_PRESETS[d]?.standard;
-      const pCruiser = STUDENT_PRESETS[d]?.cruiser;
       const descStd = btnStd.querySelector('.preset-btn-desc');
       const descCruiser = btnCruiser.querySelector('.preset-btn-desc');
-      if (descStd && pStd) descStd.textContent = pStd.desc;
-      if (descCruiser && pCruiser) descCruiser.textContent = pCruiser.desc;
+      if (descStd) descStd.textContent = presetDesc(d, 'standard');
+      if (descCruiser) descCruiser.textContent = presetDesc(d, 'cruiser');
     });
 
     const rocket = choiceGroup(DESIGN.rocket, cat.rockets.map((r) => ({
@@ -240,18 +279,18 @@ export class DesignPanel {
       presetsBox,
       el('div', 'panel-category-header', STUDENT_UI.categoryCore),
       rocket.root,
-      exclusive(DESIGN.lander, this.kind('lander'), (m) => `slot ${m.stats.instrumentSlots} · beban ${m.stats.baseLoadW} W · `, 'lander'),
+      exclusive(DESIGN.lander, this.kind('lander'), (m) => `${DESIGN.slotLabel} ${m.stats.instrumentSlots} · ${DESIGN.loadLabel} ${m.stats.baseLoadW} W · `, 'lander'),
       exclusive(DESIGN.engine, this.kind('engine'), (m) => `Isp ${m.stats.ispS} s · ${m.stats.thrustKn} kN · `, 'engine'),
       counter(DESIGN.tanks, this.kind('tank'), 'tanks'),
       counter(DESIGN.solar, this.kind('solar'), 'solar'),
       counter(DESIGN.battery, this.kind('battery'), 'battery'),
-      exclusive(DESIGN.antenna, antennas, (m) => `rate ${m.stats.rate} · `, 'antenna'),
+      exclusive(DESIGN.antenna, antennas, (m) => `${DESIGN.rateLabel} ${m.stats.rate} · `, 'antenna'),
       instruments.root,
       fuelSection.root,
       el('div', 'panel-category-header', STUDENT_UI.categoryOptional),
-      counter(DESIGN.rtg, this.kind('rtg'), 'rtg', (m) => `${m.stats.powerW} W siang-malam · `),
+      counter(DESIGN.rtg, this.kind('rtg'), 'rtg', (m) => `${m.stats.powerW} W ${DESIGN.dayNight} · `),
       counter(DESIGN.relay, relay, 'relay'),
-      counter(DESIGN.rover, this.kind('rover'), 'rover', (m) => `${m.stats.speedMs} m/s · ${m.stats.driveW} W saat jalan · `),
+      counter(DESIGN.rover, this.kind('rover'), 'rover', (m) => `${m.stats.speedMs} m/s · ${m.stats.driveW} W ${DESIGN.whileDriving} · `),
     );
     return root;
   }
@@ -325,14 +364,14 @@ export class DesignPanel {
       const li = el('li', 'stage-item');
       const dot = el('span', 'stage-dot');
       dot.style.background = `#${STAGE_ACCENTS[i % STAGE_ACCENTS.length].toString(16).padStart(6, '0')}`;
-      li.append(dot, el('span', '', `${s.name} (${s.burnSec} dtk)`));
+      li.append(dot, el('span', '', `${s.name} (${s.burnSec} ${DESIGN.sec})`));
       this.stageList.appendChild(li);
     });
 
     const warnings = novaWarnings(result, config, this.catalog);
     clear(this.nova);
     if (warnings.length === 0) {
-      this.nova.appendChild(el('p', 'nova-ok', 'Semua indikator aman. Siap diluncurkan, Arka!'));
+      this.nova.appendChild(el('p', 'nova-ok', NOVA_MESSAGES.allClear));
     } else {
       warnings.forEach((w) => this.nova.appendChild(el('p', 'nova-warn', w)));
     }

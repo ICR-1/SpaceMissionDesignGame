@@ -1,6 +1,6 @@
 import { PROGRESS, TEXT_SCALES } from '../core/constants';
 import type { MissionOutcome } from './missionResult';
-import type { Destination, GameMode, Id } from './types';
+import type { Destination, GameMode, Id, Lang } from './types';
 
 export interface SaveData {
   version: number;
@@ -23,6 +23,8 @@ export interface SaveData {
   detail: 'low' | 'high';
   /** Musik latar prosedural per planet (terpisah dari mute efek suara). */
   music: boolean;
+  /** Bahasa antarmuka ('id' = Indonesia, 'en' = English). */
+  lang: Lang;
 }
 
 export function defaultSave(): SaveData {
@@ -30,6 +32,7 @@ export function defaultSave(): SaveData {
     version: PROGRESS.saveVersion, unlocked: [...PROGRESS.startUnlocked], stars: {}, bestScore: {},
     sciencePoints: 0, beacons: [], achievements: [], introSeen: false, tutorialSeen: false,
     muted: false, volume: PROGRESS.defaultVolume, textScale: 0, shadows: false, detail: 'high', music: true,
+    lang: 'id',
   };
 }
 
@@ -59,6 +62,7 @@ export function sanitizeSave(raw: unknown): SaveData {
     shadows: r.shadows === true,
     detail: r.detail === 'low' ? 'low' : 'high',
     music: r.music !== false,
+    lang: r.lang === 'en' ? 'en' : 'id',
     textScale: typeof r.textScale === 'number' ? Math.min(TEXT_SCALES.length - 1, Math.max(0, Math.round(r.textScale))) : 0,
   };
 }

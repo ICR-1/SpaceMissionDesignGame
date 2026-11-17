@@ -8,8 +8,8 @@ import { BaseMinigame, CANVAS_H, CANVAS_W } from './base';
 /** Bor Presisi: tahan/lepas Spasi menjaga jarum tekanan di zona hijau sampai kedalaman target. */
 export class PreciseDrill extends BaseMinigame {
   readonly id = 'precise_drill';
-  readonly title = MINIGAME_UI.drill.title;
-  readonly hint = MINIGAME_UI.drill.hint;
+  get title(): string { return MINIGAME_UI.drill.title; }
+  get hint(): string { return MINIGAME_UI.drill.hint; }
   get durationSec(): number { return MG.drill.timeLimitSec; }
 
   private params!: DrillParams;

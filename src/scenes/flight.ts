@@ -29,7 +29,7 @@ import {
 import { clamp } from '../rules/margin';
 import { buildOutcome } from '../rules/outcome';
 import { linesFor } from '../rules/dialogs';
-import { showEventDialog, showNovaBubble } from '../ui/dialog';
+import { showEventDialog, showNovaBubble, type EventDialog } from '../ui/dialog';
 import { Cinematic } from '../ui/cinematic';
 import { shardVelocity, shatterObject } from '../gen/shatter';
 import { MeteorShower } from '../gen/meteors';
@@ -208,6 +208,7 @@ export class FlightScene extends BaseScene {
   private endedTimer = -1;
   private resultDelaySec = RESULT_DELAY_SEC;
   private eventOpen = false;
+  private activeEventDialog: { id: string; dialog: EventDialog } | null = null;
   /** Adegan animasi sebelum dialog event penerbangan (simulasi tetap beku selama adegan). */
   private eventIntro: { id: string; spec: EventSceneSpec; t: number; pulse: number; open: () => void } | null = null;
   private eventShower: MeteorShower | null = null;
@@ -351,6 +352,7 @@ export class FlightScene extends BaseScene {
     this.cinematic?.dispose();
     this.cinematic = null;
     this.eventIntro = null;
+    this.activeEventDialog = null;
     if (this.model) { this.pivot.remove(this.model.root); disposeTree(this.model.root); }
     if (this.landingLander) { this.scene.remove(this.landingLander); disposeTree(this.landingLander); }
     for (const f of [this.flame, this.landingFlame, ...this.boosterFlames.map((b) => b.flame)]) if (f) { f.removeFromParent(); disposeFlame(f); }
@@ -378,6 +380,19 @@ export class FlightScene extends BaseScene {
     this.smoke = this.dust = this.spaceDust = null;
     this.sim = null;
     this.hud = null;
+  }
+
+  private instrumentName = (id: string): string =>
+    this.ctx.catalog.instruments.find((i) => i.id === id)?.name ?? id;
+
+  onLanguageChange(): void {
+    this.assembly = resolveAssembly(this.ctx.store.get().mission, this.ctx.catalog);
+    this.hud?.refreshLocale(this.assembly.rocket, this.instrumentName);
+    this.tutor?.refreshLocale();
+    if (this.activeEventDialog) {
+      const ev = this.ctx.catalog.events.find((e) => e.id === this.activeEventDialog!.id);
+      if (ev) this.activeEventDialog.dialog.refreshLocale(ev);
+    }
   }
 
   private nova(ui: HTMLElement, id: string): void {
@@ -600,24 +615,29 @@ export class FlightScene extends BaseScene {
     const event = pickFlightEvent(this.ctx.catalog.events, assembly.destination.id, seed);
     if (!event) return;
     this.eventOpen = true;
-    const openDialog = (): unknown => showEventDialog(
-      ui, event,
-      (i) => {
-        const outcome = rollChoice(event, i, seed);
-        if (event.id === 'ev_micrometeor') this.shake.add(0.6);
-        const dv = outcome.effects.filter((ef) => ef.target === 'deltaVms').reduce((t, ef) => t + ef.delta, 0);
-        if (outcome.handledWell) {
-          sim.eventsHandledWell += 1;
-          sim.handledEventIds.push(event.id);
-        }
-        for (const ev of sim.applyDvAdjust(dv)) this.handleEvent(ev);
-        return outcome;
-      },
-      () => {
-        this.eventOpen = false;
-        this.ctx.input.clear();
-      },
-    );
+    const openDialog = (): void => {
+      const latest = this.ctx.catalog.events.find((e) => e.id === event.id) ?? event;
+      const dialog = showEventDialog(
+        ui, latest,
+        (i) => {
+          const outcome = rollChoice(latest, i, seed);
+          if (latest.id === 'ev_micrometeor') this.shake.add(0.6);
+          const dv = outcome.effects.filter((ef) => ef.target === 'deltaVms').reduce((t, ef) => t + ef.delta, 0);
+          if (outcome.handledWell) {
+            sim.eventsHandledWell += 1;
+            sim.handledEventIds.push(latest.id);
+          }
+          for (const ev of sim.applyDvAdjust(dv)) this.handleEvent(ev);
+          return outcome;
+        },
+        () => {
+          this.activeEventDialog = null;
+          this.eventOpen = false;
+          this.ctx.input.clear();
+        },
+      );
+      this.activeEventDialog = { id: latest.id, dialog };
+    };
     const spec = eventSceneFor(event.id);
     if (!spec) { openDialog(); return; }
     audio.alarm();
@@ -1152,7 +1172,7 @@ export class FlightScene extends BaseScene {
         this.ctx.store.set({ flight, surface: null, outcome: null });
         this.ctx.go('surface');
       }
-    });
+    }, this.instrumentName);
   }
 }
 
